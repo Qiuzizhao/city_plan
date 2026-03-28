@@ -517,7 +517,7 @@
             const baseColor = forcedColor !== null ? forcedColor : glassColors[Math.floor(Math.random() * glassColors.length)];
             
             // 随机建筑形状样式
-            const shapeStyle = forcedStyle !== null ? forcedStyle : Math.floor(Math.random() * 4);
+            const shapeStyle = forcedStyle !== null ? forcedStyle : Math.floor(Math.random() * 5);
             
             // 记录到 userData
             group.userData = { isBuilding: true, style: shapeStyle, color: baseColor, height: height };
@@ -588,7 +588,7 @@
                 spire.rotation.y = Math.PI / 4;
                 group.add(spire);
                 
-            } else {
+            } else if (shapeStyle === 3) {
                 // --- 样式 3: 扭曲多边形/双子塔组合 ---
                 // 主塔
                 const geo1 = new THREE.BoxGeometry(0.4, height, 0.4);
@@ -613,6 +613,41 @@
                 group.add(t1);
                 group.add(t2);
                 group.add(bridge);
+            } else {
+                // --- 样式 4: 春笋大厦 (类似深圳华润春笋) ---
+                // 使用锥形来模拟春笋的子弹头形状
+                const geo = new THREE.CylinderGeometry(0.05, 0.45, height, 32);
+                const building = new THREE.Mesh(geo, mat);
+                building.position.y = height / 2;
+                building.castShadow = true;
+                building.receiveShadow = true;
+                
+                // 为了体现"竹笋"的网状结构，添加一些金属质感的环形结构
+                const ringCount = Math.floor(height * 2.5);
+                for(let i=1; i<ringCount; i++) {
+                    const yPos = (i / ringCount) * height;
+                    // 计算当前高度的半径 (与 CylinderGeometry 的锥度保持一致)
+                    const ratio = yPos / height;
+                    const r = 0.45 * (1 - ratio) + 0.05 * ratio + 0.01; 
+                    const ringGeo = new THREE.TorusGeometry(r, 0.015, 8, 32);
+                    const ringMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xe2e8f0, 
+                        metalness: 0.8, 
+                        roughness: 0.2,
+                        emissive: new THREE.Color(0xffffff),
+                        emissiveIntensity: isNight ? 0.3 : 0 // 夜晚结构线微亮
+                    });
+                    // 将材质缓存用于昼夜切换
+                    windowMaterials.push(ringMat);
+                    ringMat.userData = { isStructureRing: true };
+
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    ring.position.y = yPos;
+                    group.add(ring);
+                }
+                
+                group.add(building);
             }
 
             group.position.set(x, 0, z);
@@ -2369,6 +2404,8 @@
                 windowMaterials.forEach(mat => {
                     if (mat.userData && mat.userData.isCarLight) {
                         mat.opacity = 1; // 车灯通过透明度控制显示
+                    } else if (mat.userData && mat.userData.isStructureRing) {
+                        mat.emissiveIntensity = 0.3; // 春笋大厦的结构线微亮
                     } else {
                         // 如果是汽车车身/车顶，发光弱一点，如果是建筑，发光强一点
                         mat.emissiveIntensity = mat.userData && mat.userData.isCarBody ? 0.4 : 0.7;
