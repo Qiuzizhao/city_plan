@@ -1329,6 +1329,21 @@
             deck.receiveShadow = true;
             group.add(deck);
 
+            // 坡道虚线标线
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const dashGeo = new THREE.PlaneGeometry(0.05, 0.4);
+            dashGeo.rotateX(-Math.PI / 2);
+            
+            const dash1 = new THREE.Mesh(dashGeo, lineMat);
+            dash1.position.set(0, (startH + endH) / 2 + 0.026, 0.25);
+            dash1.rotation.x = -angle;
+            group.add(dash1);
+            
+            const dash2 = new THREE.Mesh(dashGeo, lineMat);
+            dash2.position.set(0, (startH + endH) / 2 + 0.026, -0.25);
+            dash2.rotation.x = -angle;
+            group.add(dash2);
+
             // 护栏
             const railGeo = new THREE.BoxGeometry(0.05, 0.15, length);
             const railMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
@@ -2565,6 +2580,19 @@
             }
         }
 
+        // 清理特定网格内的所有车辆
+        function cleanupCarsInGrid(gridKey) {
+            for (let i = activeCars.length - 1; i >= 0; i--) {
+                const car = activeCars[i];
+                const gridX = Math.floor(car.mesh.position.x) + 0.5;
+                const gridZ = Math.floor(car.mesh.position.z) + 0.5;
+                if (`${gridX},${gridZ}` === gridKey) {
+                    carsGroup.remove(car.mesh);
+                    activeCars.splice(i, 1);
+                }
+            }
+        }
+
         // --- 6. 交互系统 (光标与点击) ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
@@ -2593,6 +2621,25 @@
             mouse.y = -(clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
+
+            // 如果当前是拆除或高度模式，尝试捕捉真实物体的表面高度
+            let targetY = 0.05;
+            if (currentTool === 'demolish' || elevationMode || currentTool === 'pointer') {
+                const allIntersects = raycaster.intersectObjects(objectsGroup.children, true);
+                if (allIntersects.length > 0) {
+                    let hit = allIntersects[0].object;
+                    while (hit && (!hit.userData || (!hit.userData.isRoad && !hit.userData.type && !hit.userData.isBuilding && !hit.userData.isTree && !hit.userData.isGreen && !hit.userData.isWater && !hit.parent?.userData?.isRoad && !hit.parent?.userData?.isBuilding))) {
+                        hit = hit.parent;
+                    }
+                    if (hit) {
+                        const topLevelObj = hit.userData.isRoad || hit.userData.type || hit.userData.isBuilding || hit.userData.isTree || hit.userData.isGreen || hit.userData.isWater ? hit : hit.parent;
+                        if (topLevelObj && topLevelObj.position) {
+                            targetY = topLevelObj.position.y + 0.1; // 稍微高于物体表面
+                        }
+                    }
+                }
+            }
+
             const intersects = raycaster.intersectObject(interactPlane);
 
             if (intersects.length > 0) {
@@ -2609,7 +2656,7 @@
                 let offsetZ = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(currentTool) ? 0.5 : 0;
                 
                 if (x >= -limit && x + (size - 1) <= limit && z >= -limit && z + (size - 1) <= limit) {
-                    cursor.position.set(x + offsetX, 0.05, z + offsetZ);
+                    cursor.position.set(x + offsetX, targetY, z + offsetZ);
                     cursor.scale.set(size, 1, size);
                     cursor.visible = true;
                     
@@ -2730,6 +2777,40 @@
                 if (topObj && (topObj.type.startsWith('road') || topObj.type === 'bridge' || topObj.type === 'ramp')) {
                     // 只允许对道路或桥梁调整高度
                     const currentLevel = topObj.level;
+                    
+                    // 如果是对坡道进行高度调整，由于坡道连接两个层级，它的目标层级逻辑需要特殊处理
+                    if (topObj.type === 'ramp') {
+                        // 我们将坡道恢复为其底部的直道（桥或路）
+                        const rampData = topObj.mesh.userData;
+                        const baseLevel = Math.min(rampData.levelStart, rampData.levelEnd);
+                        
+                        objectsGroup.remove(topObj.mesh);
+                        deleteObjAtLevel(key, currentLevel);
+                        cleanupCarsInGrid(key);
+                        
+                        let newMesh;
+                        if (baseLevel === 0) {
+                            newMesh = createRoad(gridX, gridZ);
+                            if (rampData.orientation !== undefined) {
+                                // 坡道是直路的一种，朝向保留
+                                newMesh.rotation.y = rampData.orientation * (Math.PI / 2);
+                                newMesh.userData.orientation = rampData.orientation % 2; // 0/2 纵向, 1/3 横向
+                            }
+                            setObjAtLevel(key, 0, { type: 'road', mesh: newMesh });
+                        } else {
+                            newMesh = createBridge(gridX, gridZ, baseLevel);
+                            if (rampData.orientation !== undefined) {
+                                newMesh.rotation.y = rampData.orientation * (Math.PI / 2);
+                                newMesh.userData.orientation = rampData.orientation % 2;
+                            }
+                            setObjAtLevel(key, baseLevel, { type: 'bridge', mesh: newMesh });
+                        }
+                        
+                        if (newMesh) objectsGroup.add(newMesh);
+                        updateRampsAround(gridX, gridZ, baseLevel);
+                        return;
+                    }
+
                     let targetLevel = currentLevel;
                     
                     if (elevationMode === 'up') targetLevel++;
@@ -2740,6 +2821,9 @@
                         objectsGroup.remove(topObj.mesh);
                         deleteObjAtLevel(key, currentLevel);
                         
+                        // 清理该网格上的车辆，防止卡顿
+                        cleanupCarsInGrid(key);
+
                         let newMesh;
                         if (targetLevel === 0) {
                             // 降回到地面，变成普通道路
@@ -2796,6 +2880,11 @@
                     // 如果是在高度调整模式下，忽略拆除操作
                     if (elevationMode) return;
                     
+                    // 清理该网格上的车辆，防止卡顿
+                    if (topObj.type.startsWith('road') || topObj.type === 'bridge' || topObj.type === 'ramp') {
+                        cleanupCarsInGrid(key);
+                    }
+
                     // 桥梁特殊拆除逻辑：恢复水面
                     if (topObj.type === 'bridge') {
                         objectsGroup.remove(topObj.mesh);
