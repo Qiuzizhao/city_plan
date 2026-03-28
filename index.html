@@ -66,9 +66,9 @@
             <!-- 桌面端提示 -->
             <p class="text-xs text-gray-500 leading-relaxed hidden md:block">
                 <span class="font-semibold text-gray-700">操作指南：</span><br/>
-                左键：点击放置 / 切换样式<br/>
-                右键：拖动旋转视角<br/>
-                滚轮/中键：缩放 / 平移视角
+                左键：点击放置 / 拖动旋转视角<br/>
+                右键：拖动平移视角<br/>
+                滚轮：缩放视角
             </p>
             <!-- 移动端提示 -->
             <p class="text-xs text-gray-500 leading-relaxed md:hidden">
@@ -81,6 +81,11 @@
 
         <!-- 底部工具栏 -->
         <div class="bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-xl pointer-events-auto border border-gray-100 self-center flex gap-2 overflow-x-auto max-w-full">
+            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="pointer">
+                <span class="text-2xl mb-1">🖱️</span>
+                <span class="text-xs font-medium">选择</span>
+            </button>
+            <div class="w-px bg-gray-200 mx-1 my-2"></div> <!-- 分隔线 -->
             <button class="tool-btn active flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px]" data-tool="residential">
                 <span class="text-2xl mb-1">🏠</span>
                 <span class="text-xs font-medium">住宅</span>
@@ -274,11 +279,11 @@
         controls.minDistance = 5;
         controls.maxDistance = 40;
 
-        // 优化鼠标按键逻辑：左键放置，右键旋转，中键平移
+        // 优化鼠标按键逻辑：左键点击放置，左键拖动旋转视角，右键长按平移，滚轮缩放
         controls.mouseButtons = {
-            LEFT: null, // 禁用左键轨道控制，防止与放置物体冲突
-            MIDDLE: THREE.MOUSE.PAN,
-            RIGHT: THREE.MOUSE.ROTATE
+            LEFT: THREE.MOUSE.ROTATE, // 恢复左键为旋转（点击建造逻辑通过 onPointerUp 的距离防抖实现）
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
         };
         
         // 优化触摸操作：单指用于旋转视角，双指用于缩放和平移
@@ -380,29 +385,63 @@
             cloudsGroup.add(cloud);
         }
 
-        const gridSize = 30; // 30x30 的网格
+        let gridSize = 30; // 初始 30x30 的网格
         const cellSize = 1;
 
         // 不可见的交互平面（用于射线检测）
-        const interactPlaneGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+        let interactPlaneGeo = new THREE.PlaneGeometry(gridSize, gridSize);
         interactPlaneGeo.rotateX(-Math.PI / 2);
-        const interactPlane = new THREE.Mesh(interactPlaneGeo, new THREE.MeshBasicMaterial({ visible: false }));
+        let interactPlane = new THREE.Mesh(interactPlaneGeo, new THREE.MeshBasicMaterial({ visible: false }));
         scene.add(interactPlane);
 
         // 可视化的网格线
-        const gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x000000, 0x000000);
+        let gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x000000, 0x000000);
         gridHelper.material.opacity = 0.1;
         gridHelper.material.transparent = true;
         gridHelper.position.y = 0.01; // 稍微抬高避免Z冲突
         scene.add(gridHelper);
 
         // 绿地平面
-        const groundGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+        let groundGeo = new THREE.PlaneGeometry(gridSize, gridSize);
         groundGeo.rotateX(-Math.PI / 2);
         const groundMat = new THREE.MeshLambertMaterial({ color: 0x55aa55 }); // 草绿色
-        const ground = new THREE.Mesh(groundGeo, groundMat);
+        let ground = new THREE.Mesh(groundGeo, groundMat);
         ground.receiveShadow = true;
         scene.add(ground);
+
+        // 动态扩展网格函数
+        function expandGrid() {
+            gridSize += 4; // 每次扩展4行（两边各扩展两行）
+            
+            // 移除旧的网格、交互平面和地面
+            scene.remove(interactPlane);
+            scene.remove(gridHelper);
+            scene.remove(ground);
+            
+            // 释放旧几何体内存
+            interactPlaneGeo.dispose();
+            groundGeo.dispose();
+            
+            // 重新创建并添加
+            interactPlaneGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+            interactPlaneGeo.rotateX(-Math.PI / 2);
+            interactPlane = new THREE.Mesh(interactPlaneGeo, new THREE.MeshBasicMaterial({ visible: false }));
+            scene.add(interactPlane);
+            
+            gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x000000, 0x000000);
+            gridHelper.material.opacity = 0.1;
+            gridHelper.material.transparent = true;
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            groundGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+            groundGeo.rotateX(-Math.PI / 2);
+            ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            console.log(`地图已自动扩展，当前大小: ${gridSize}x${gridSize}`);
+        }
 
         // --- 4. 城市数据与构建系统 ---
         let currentTool = 'residential';
@@ -1132,6 +1171,82 @@
             group.add(water);
             group.add(ripple);
             
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        // 生成桥梁 (Bridge) - 跨越水面的道路
+        function createBridge(x, z) {
+            const group = new THREE.Group();
+            group.userData = { isRoad: true, roadType: 'straight', orientation: 0, baseType: 'water' }; // 基础类型是水面
+            
+            // 1. 底层水面 (保留水面视觉效果)
+            const waterGroup = createWater(0, 0); // 相对坐标 0,0
+            group.add(waterGroup);
+
+            // 2. 桥面结构 (稍微抬高)
+            const bridgeHeight = 0.2; // 桥面高度
+            
+            // 桥面主体
+            const deckGeo = new THREE.BoxGeometry(0.8, 0.05, 1);
+            const deckMat = new THREE.MeshLambertMaterial({ color: 0x475569 }); // 沥青色
+            const deck = new THREE.Mesh(deckGeo, deckMat);
+            deck.position.set(0, bridgeHeight, 0);
+            deck.castShadow = true;
+            deck.receiveShadow = true;
+            group.add(deck);
+            
+            // 车道中心虚线
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const dashGeo = new THREE.PlaneGeometry(0.05, 0.4);
+            dashGeo.rotateX(-Math.PI / 2);
+            
+            const dash1 = new THREE.Mesh(dashGeo, lineMat);
+            dash1.position.set(0, bridgeHeight + 0.026, 0.25);
+            group.add(dash1);
+            
+            const dash2 = new THREE.Mesh(dashGeo, lineMat);
+            dash2.position.set(0, bridgeHeight + 0.026, -0.25);
+            group.add(dash2);
+            
+            // 3. 桥梁护栏
+            const railGeo = new THREE.BoxGeometry(0.05, 0.15, 1);
+            const railMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 }); // 浅灰色护栏
+            
+            const railL = new THREE.Mesh(railGeo, railMat);
+            railL.position.set(-0.375, bridgeHeight + 0.1, 0);
+            railL.castShadow = true;
+            group.add(railL);
+            
+            const railR = new THREE.Mesh(railGeo, railMat);
+            railR.position.set(0.375, bridgeHeight + 0.1, 0);
+            railR.castShadow = true;
+            group.add(railR);
+            
+            // 4. 桥墩 (支撑在水中)
+            const pillarGeo = new THREE.CylinderGeometry(0.05, 0.05, bridgeHeight, 8);
+            const pillarMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+            
+            const p1 = new THREE.Mesh(pillarGeo, pillarMat);
+            p1.position.set(-0.25, bridgeHeight / 2, 0.3);
+            p1.castShadow = true;
+            group.add(p1);
+            
+            const p2 = new THREE.Mesh(pillarGeo, pillarMat);
+            p2.position.set(0.25, bridgeHeight / 2, 0.3);
+            p2.castShadow = true;
+            group.add(p2);
+            
+            const p3 = new THREE.Mesh(pillarGeo, pillarMat);
+            p3.position.set(-0.25, bridgeHeight / 2, -0.3);
+            p3.castShadow = true;
+            group.add(p3);
+            
+            const p4 = new THREE.Mesh(pillarGeo, pillarMat);
+            p4.position.set(0.25, bridgeHeight / 2, -0.3);
+            p4.castShadow = true;
+            group.add(p4);
+
             group.position.set(x, 0, z);
             return group;
         }
@@ -2021,7 +2136,7 @@
             // 找到所有道路
             const roadKeys = [];
             cityMap.forEach((obj, key) => {
-                if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t') {
+                if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t' || obj.type === 'bridge') {
                     roadKeys.push(key);
                 }
             });
@@ -2114,7 +2229,7 @@
                 let currentRoad = null;
                 if (cityMap.has(currentKey)) {
                     const obj = cityMap.get(currentKey);
-                    if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t') {
+                    if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t' || obj.type === 'bridge') {
                         currentRoad = obj;
                     }
                 }
@@ -2308,7 +2423,11 @@
                     // 根据工具状态更新光标颜色
                     if (currentTool === 'demolish') {
                         cursorMat.color.setHex(0xef4444); // 红色
+                    } else if (currentTool === 'pointer') {
+                        cursorMat.color.setHex(0xffffff); // 白色 (选择模式)
+                        cursorMat.opacity = 0.8;
                     } else {
+                        cursorMat.opacity = 0.5; // 恢复默认透明度
                         let occupied = false;
                         for(let i = 0; i < size; i++) {
                             for(let j = 0; j < size; j++) {
@@ -2353,6 +2472,9 @@
             const dist = Math.hypot(event.clientX - pointerDownCoords.x, event.clientY - pointerDownCoords.y);
             // 如果距离大于 10px，判定为滑动（旋转/平移视角），不触发点击建造
             if (dist > 10) return;
+            
+            // 如果当前工具是“选择/指针”，则不执行任何操作，仅用于查看
+            if (currentTool === 'pointer') return;
 
             // 重新执行射线检测获取精确坐标（由于移动端没有hover状态，必须在此处重新检测）
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -2378,12 +2500,37 @@
                 return;
             }
 
+            // 检查是否靠近边缘并触发自动扩建
+            // 确保建筑距离边缘永远有两行以上 (即 limit - max(|gridX|, |gridZ|) <= 2)
+            let needsExpansion = false;
+            for(let i=0; i<size; i++) {
+                for(let j=0; j<size; j++) {
+                    const checkX = gridX + i;
+                    const checkZ = gridZ + j;
+                    if (limit - Math.abs(checkX) <= 2 || limit - Math.abs(checkZ) <= 2) {
+                        needsExpansion = true;
+                    }
+                }
+            }
+            if (needsExpansion) {
+                expandGrid();
+            }
+
             const key = `${gridX},${gridZ}`;
 
             if (currentTool === 'demolish') {
                 // 拆除逻辑
                 if (cityMap.has(key)) {
                     const obj = cityMap.get(key);
+                    // 桥梁特殊拆除逻辑：恢复水面
+                    if (obj.type === 'bridge') {
+                        objectsGroup.remove(obj.mesh);
+                        const newWaterMesh = createWater(gridX, gridZ);
+                        objectsGroup.add(newWaterMesh);
+                        cityMap.set(key, { type: 'water', mesh: newWaterMesh });
+                        return;
+                    }
+
                     // 如果是占多格的建筑（非主节点）
                     if (obj.mainKey) {
                         const mainObj = cityMap.get(obj.mainKey);
@@ -2418,9 +2565,19 @@
                     const clickedObj = cityMap.get(`${rawGridX},${rawGridZ}`);
                     const mainObj = clickedObj.mainKey ? cityMap.get(clickedObj.mainKey) : clickedObj;
 
+                    // 水面上建桥逻辑：当前工具是直路且点击的是水面
+                    if (mainObj.type === 'water' && currentTool === 'road') {
+                        objectsGroup.remove(mainObj.mesh);
+                        let newMesh = createBridge(rawGridX, rawGridZ);
+                        objectsGroup.add(newMesh);
+                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: 'bridge', mesh: newMesh });
+                        return;
+                    }
+
                     // 旋转逻辑：同种工具点击，且属于可旋转类型
-                    const rotatableTypes = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl', 'road', 'road_curve', 'road_cross', 'road_t'];
-                    if (mainObj.type === currentTool && rotatableTypes.includes(currentTool)) {
+                    const rotatableTypes = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl', 'road', 'road_curve', 'road_cross', 'road_t', 'bridge'];
+                    if ((mainObj.type === currentTool && rotatableTypes.includes(currentTool)) || 
+                        (mainObj.type === 'bridge' && currentTool === 'road')) { // 用道路工具点击桥也能旋转
                         mainObj.mesh.rotation.y += Math.PI / 2;
                         mainObj.mesh.userData.orientation = ((mainObj.mesh.userData.orientation || 0) + 1) % 4;
                         return;
@@ -2674,12 +2831,26 @@
                 };
                 dataToSave.push(item);
             });
-            return dataToSave;
+            return {
+                gridSize: gridSize,
+                buildings: dataToSave
+            };
         }
 
         // 根据数据重建城市
         function loadCityData(data) {
-            // 1. 清空当前城市
+            // 兼容旧版存档
+            let buildingsData = Array.isArray(data) ? data : data.buildings;
+            let savedGridSize = Array.isArray(data) ? 30 : (data.gridSize || 30);
+
+            // 1. 恢复网格大小
+            if (savedGridSize > gridSize) {
+                while (gridSize < savedGridSize) {
+                    expandGrid();
+                }
+            }
+
+            // 2. 清空当前城市
             cityMap.forEach((obj, key) => {
                 if (obj.mesh) objectsGroup.remove(obj.mesh);
             });
@@ -2692,8 +2863,8 @@
             // 清理之前的发光材质缓存
             windowMaterials.length = 0; 
 
-            // 2. 重建城市
-            data.forEach(item => {
+            // 3. 重建城市
+            buildingsData.forEach(item => {
                 let newMesh;
                 switch (item.type) {
                     case 'residential': 
@@ -2735,6 +2906,13 @@
                         break;
                     case 'water': 
                         newMesh = createWater(item.x, item.z); 
+                        break;
+                    case 'bridge':
+                        newMesh = createBridge(item.x, item.z);
+                        if (item.orientation) {
+                            newMesh.rotation.y = item.orientation * (Math.PI / 2);
+                            newMesh.userData.orientation = item.orientation;
+                        }
                         break;
                     case 'flower':
                         newMesh = createFlowerField(item.x, item.z);
@@ -2878,7 +3056,8 @@
             reader.onload = (e) => {
                 try {
                     const data = JSON.parse(e.target.result);
-                    if (!Array.isArray(data)) throw new Error("无效的数据格式");
+                    // 兼容新旧格式验证
+                    if (!Array.isArray(data) && !data.buildings) throw new Error("无效的数据格式");
                     
                     loadCityData(data);
                     showStatus('✅ 导入成功', '#ea580c');
@@ -3077,6 +3256,36 @@
                 }
             }
 
+            // 人口估测算法
+            // 基础人口：每个住宅区算 100 人，多格住宅算 400 人
+            // 就业岗位：每个商业区提供 150 个岗位，多格提供 600 个
+            // 吸引力乘数：受环境（绿化、水）、公共服务、交通影响
+            let basePopulation = 0;
+            let jobs = 0;
+            
+            cityMap.forEach((obj) => {
+                if (obj.mainKey) return;
+                const sizeMultiplier = obj.mesh.userData.size === 2 ? 4 : 1;
+                
+                if (obj.type === 'residential') {
+                    basePopulation += 100 * sizeMultiplier;
+                } else if (obj.type === 'commercial') {
+                    jobs += 150 * sizeMultiplier;
+                }
+            });
+
+            // 吸引力系数 (基于城市评分，50分为基准，每多1分增加1%吸引力，最多1.5倍)
+            const attractiveness = Math.max(0.5, Math.min(1.5, score / 100 + 0.5));
+            
+            // 实际人口 = 基础人口 * 吸引力。同时受限于工作岗位（不能超过岗位的 1.5 倍）
+            let estimatedPopulation = Math.floor(basePopulation * attractiveness);
+            if (jobs > 0 && estimatedPopulation > jobs * 1.5) {
+                estimatedPopulation = Math.floor(jobs * 1.5);
+                suggestions.push("⚠️ 人口增长受限于工作岗位，请建造更多商业区以提供就业！");
+            } else if (jobs > estimatedPopulation * 2) {
+                suggestions.push("💡 城市劳动力短缺，商业发展受限，建议建造更多住宅区吸引人口！");
+            }
+
             // 限制分数范围
             score = Math.max(0, Math.min(100, Math.round(score)));
 
@@ -3100,6 +3309,9 @@
                 <div>🛣️ 道路: <span class="font-bold">${roadCount}</span></div>
                 <div>🌊 水面: <span class="font-bold">${waterCount}</span></div>
                 <div>🏗️ 总计: <span class="font-bold">${totalObjects}</span></div>
+                <div class="col-span-2 mt-2 pt-2 border-t border-gray-200 text-indigo-700">
+                    👥 估测人口: <span class="font-black text-lg">${estimatedPopulation.toLocaleString()}</span> 人
+                </div>
             `;
 
             if (suggestions.length === 0) {
