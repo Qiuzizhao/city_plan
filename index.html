@@ -61,12 +61,19 @@
                 </svg>
                 迷你城市规划师
             </h1>
-            <p class="text-xs text-gray-500 leading-relaxed">
+            <!-- 桌面端提示 -->
+            <p class="text-xs text-gray-500 leading-relaxed hidden md:block">
                 <span class="font-semibold text-gray-700">操作指南：</span><br/>
-                鼠标左键：放置 / 旋转道路<br/>
-                鼠标右键：旋转视角<br/>
-                鼠标滚轮/中键：缩放/平移视角<br/>
-                双指操作：缩放/旋转视角
+                左键：点击放置 / 切换样式<br/>
+                右键：拖动旋转视角<br/>
+                滚轮/中键：缩放 / 平移视角
+            </p>
+            <!-- 移动端提示 -->
+            <p class="text-xs text-gray-500 leading-relaxed md:hidden">
+                <span class="font-semibold text-gray-700">操作指南：</span><br/>
+                单指点击：放置 / 切换样式<br/>
+                单指滑动：旋转视角<br/>
+                双指滑动：缩放 / 平移视角
             </p>
         </div>
 
@@ -272,9 +279,9 @@
             RIGHT: THREE.MOUSE.ROTATE
         };
         
-        // 优化触摸操作：单指用于放置(通过 pointerdown)，双指用于旋转和缩放
+        // 优化触摸操作：单指用于旋转视角，双指用于缩放和平移
         controls.touches = {
-            ONE: null, // 禁用单指轨道控制，防止与单指放置冲突
+            ONE: THREE.TOUCH.ROTATE, // 改为单指旋转
             TWO: THREE.TOUCH.DOLLY_PAN
         };
 
@@ -517,7 +524,7 @@
             const baseColor = forcedColor !== null ? forcedColor : glassColors[Math.floor(Math.random() * glassColors.length)];
             
             // 随机建筑形状样式
-            const shapeStyle = forcedStyle !== null ? forcedStyle : Math.floor(Math.random() * 5);
+            const shapeStyle = forcedStyle !== null ? forcedStyle : Math.floor(Math.random() * 8); // 扩展到8种样式
             
             // 记录到 userData
             group.userData = { isBuilding: true, style: shapeStyle, color: baseColor, height: height };
@@ -613,7 +620,7 @@
                 group.add(t1);
                 group.add(t2);
                 group.add(bridge);
-            } else {
+            } else if (shapeStyle === 4) {
                 // --- 样式 4: 春笋大厦 (类似深圳华润春笋) ---
                 // 使用锥形来模拟春笋的子弹头形状
                 const geo = new THREE.CylinderGeometry(0.05, 0.45, height, 32);
@@ -648,6 +655,85 @@
                 }
                 
                 group.add(building);
+            } else if (shapeStyle === 5) {
+                // --- 样式 5: 扭转大厦 (类似上海中心大厦) ---
+                // 使用多层稍微旋转的多边形叠加，模拟扭转上升的效果
+                const segments = Math.floor(height * 4); // 层数
+                const segmentHeight = height / segments;
+                const twistAngle = Math.PI * 0.6; // 总扭转角度约 108 度
+                
+                // 为了性能，我们合并几何体，但这里简化用一个 Group 包含多个切片
+                const towerGroup = new THREE.Group();
+                for (let i = 0; i < segments; i++) {
+                    // 底部粗，顶部细
+                    const scale = 1 - (i / segments) * 0.4;
+                    // 每一层的截面是一个圆角三角形（这里用圆柱体模拟平滑多边形）
+                    const sliceGeo = new THREE.CylinderGeometry(0.35 * scale, 0.35 * scale, segmentHeight, 9);
+                    const slice = new THREE.Mesh(sliceGeo, mat);
+                    
+                    slice.position.y = i * segmentHeight + segmentHeight / 2;
+                    slice.rotation.y = (i / segments) * twistAngle;
+                    slice.castShadow = true;
+                    slice.receiveShadow = true;
+                    towerGroup.add(slice);
+                }
+                group.add(towerGroup);
+                
+                // 顶部装饰
+                const crownGeo = new THREE.CylinderGeometry(0.01, 0.35 * 0.6, 0.2, 9);
+                const crown = new THREE.Mesh(crownGeo, mat);
+                crown.position.y = height + 0.1;
+                crown.rotation.y = twistAngle;
+                group.add(crown);
+                
+            } else if (shapeStyle === 6) {
+                // --- 样式 6: 倒角四方塔 (类似平安金融中心) ---
+                // 底部宽，顶部窄，四面呈斜坡状收缩
+                const geo = new THREE.CylinderGeometry(0.15, 0.45, height, 4); // 4段代表四边形
+                // 旋转45度使其面对正面
+                const building = new THREE.Mesh(geo, mat);
+                building.rotation.y = Math.PI / 4;
+                building.position.y = height / 2;
+                building.castShadow = true;
+                building.receiveShadow = true;
+                group.add(building);
+                
+                // 标志性针状塔尖
+                const spireGeo = new THREE.CylinderGeometry(0.01, 0.05, 0.6, 8);
+                const spireMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xe2e8f0, 
+                    metalness: 0.9, 
+                    roughness: 0.1 
+                });
+                const spire = new THREE.Mesh(spireGeo, spireMat);
+                spire.position.y = height + 0.3;
+                group.add(spire);
+                
+            } else {
+                // --- 样式 7: 细长直柱带顶环 (类似广州国际金融中心/西塔风格简化) ---
+                // 主体结构呈流线型
+                const geo = new THREE.CylinderGeometry(0.25, 0.4, height, 32);
+                const building = new THREE.Mesh(geo, mat);
+                building.position.y = height / 2;
+                building.castShadow = true;
+                building.receiveShadow = true;
+                group.add(building);
+                
+                // 顶部的停机坪和网状结构
+                const topRingGeo = new THREE.TorusGeometry(0.25, 0.02, 8, 32);
+                const topRingMat = new THREE.MeshStandardMaterial({ 
+                    color: 0x94a3b8,
+                    metalness: 0.5,
+                    emissive: new THREE.Color(0xffaa00),
+                    emissiveIntensity: isNight ? 0.8 : 0 // 夜晚发出橙黄色光
+                });
+                windowMaterials.push(topRingMat);
+                topRingMat.userData = { isStructureRing: true };
+                
+                const topRing = new THREE.Mesh(topRingGeo, topRingMat);
+                topRing.rotation.x = Math.PI / 2;
+                topRing.position.y = height;
+                group.add(topRing);
             }
 
             group.position.set(x, 0, z);
@@ -2211,22 +2297,53 @@
             }
         }
 
-        // 放置或拆除物体
+        // 记录手指/鼠标按下的初始坐标
+        let pointerDownCoords = { x: 0, y: 0 };
+
         function onPointerDown(event) {
             // 如果点击的是 UI 元素，则不执行 3D 交互
             if (event.target.closest('.pointer-events-auto')) return;
             
-            // 仅允许左键 (button 0) 触发建造逻辑，中键 (1) 和右键 (2) 仅用于视角控制
+            // 仅允许左键 (button 0) 触发记录，中键 (1) 和右键 (2) 仅用于视角控制
             if (event.button !== 0) return; 
 
-            if (!cursor.visible) return;
+            pointerDownCoords = { x: event.clientX, y: event.clientY };
+        }
+
+        // 放置或拆除物体
+        function onPointerUp(event) {
+            if (event.target.closest('.pointer-events-auto')) return;
+            if (event.button !== 0) return;
+            
+            // 计算按下和抬起时的距离
+            const dist = Math.hypot(event.clientX - pointerDownCoords.x, event.clientY - pointerDownCoords.y);
+            // 如果距离大于 10px，判定为滑动（旋转/平移视角），不触发点击建造
+            if (dist > 10) return;
+
+            // 重新执行射线检测获取精确坐标（由于移动端没有hover状态，必须在此处重新检测）
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(interactPlane);
+
+            if (intersects.length === 0) return;
+
+            const intersect = intersects[0];
+            const rawGridX = Math.floor(intersect.point.x) + 0.5;
+            const rawGridZ = Math.floor(intersect.point.z) + 0.5;
 
             let size = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(currentTool) ? 2 : 1;
-            let offsetX = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(currentTool) ? 0.5 : 0;
-            let offsetZ = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(currentTool) ? 0.5 : 0;
+            // offsetX 和 offsetZ 仅用于网格渲染，在逻辑中不需要使用
+            
+            const gridX = rawGridX;
+            const gridZ = rawGridZ;
+            const limit = gridSize / 2;
 
-            const gridX = cursor.position.x - offsetX;
-            const gridZ = cursor.position.z - offsetZ;
+            // 边界检查
+            if (!(gridX >= -limit && gridX + (size - 1) <= limit && gridZ >= -limit && gridZ + (size - 1) <= limit)) {
+                return;
+            }
+
             const key = `${gridX},${gridZ}`;
 
             if (currentTool === 'demolish') {
@@ -2264,68 +2381,57 @@
 
                 // 建造或旋转逻辑
                 if (occupied) {
-                    // 重新射线检测获取精确点击的基础格子
-                    raycaster.setFromCamera(mouse, camera);
-                    const intersects = raycaster.intersectObject(interactPlane);
-                    if (intersects.length > 0) {
-                        const rawGridX = Math.floor(intersects[0].point.x) + 0.5;
-                        const rawGridZ = Math.floor(intersects[0].point.z) + 0.5;
-                        const rawKey = `${rawGridX},${rawGridZ}`;
+                    const clickedObj = cityMap.get(`${rawGridX},${rawGridZ}`);
+                    const mainObj = clickedObj.mainKey ? cityMap.get(clickedObj.mainKey) : clickedObj;
 
-                        if (cityMap.has(rawKey)) {
-                            const clickedObj = cityMap.get(rawKey);
-                            const mainObj = clickedObj.mainKey ? cityMap.get(clickedObj.mainKey) : clickedObj;
+                    // 旋转逻辑：同种工具点击，且属于可旋转类型
+                    const rotatableTypes = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl', 'road', 'road_curve', 'road_cross', 'road_t'];
+                    if (mainObj.type === currentTool && rotatableTypes.includes(currentTool)) {
+                        mainObj.mesh.rotation.y += Math.PI / 2;
+                        mainObj.mesh.userData.orientation = ((mainObj.mesh.userData.orientation || 0) + 1) % 4;
+                        return;
+                    }
 
-                            // 旋转逻辑：同种工具点击，且属于可旋转类型
-                            const rotatableTypes = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl', 'road', 'road_curve', 'road_cross', 'road_t'];
-                            if (mainObj.type === currentTool && rotatableTypes.includes(currentTool)) {
-                                mainObj.mesh.rotation.y += Math.PI / 2;
-                                mainObj.mesh.userData.orientation = ((mainObj.mesh.userData.orientation || 0) + 1) % 4;
-                                return;
+                    // 更换样式逻辑：同种工具点击
+                    if (mainObj.type === currentTool && currentTool === 'commercial') {
+                        objectsGroup.remove(mainObj.mesh);
+                        let nextStyle = (mainObj.mesh.userData.style + 1) % 8; // 增加到8种样式
+                        // 保持原有的颜色和高度，仅更换形状
+                        let newMesh = createCommercial(mainObj.mesh.position.x, mainObj.mesh.position.z, nextStyle, mainObj.mesh.userData.color, mainObj.mesh.userData.height);
+                        objectsGroup.add(newMesh);
+                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: currentTool, mesh: newMesh });
+                        
+                        // 简单的弹出动画效果
+                        newMesh.scale.set(0.8, 0.8, 0.8);
+                        const animateIn = () => {
+                            let s = newMesh.scale.x;
+                            s += 0.05;
+                            if(s <= 1) {
+                                newMesh.scale.setScalar(s);
+                                requestAnimationFrame(animateIn);
+                            } else {
+                                newMesh.scale.setScalar(1);
                             }
+                        };
+                        animateIn();
+                        return;
+                    }
 
-                            // 更换样式逻辑：同种工具点击
-                            if (mainObj.type === currentTool && currentTool === 'commercial') {
-                                objectsGroup.remove(mainObj.mesh);
-                                let nextStyle = (mainObj.mesh.userData.style + 1) % 5;
-                                // 保持原有的颜色和高度，仅更换形状
-                                let newMesh = createCommercial(mainObj.mesh.position.x, mainObj.mesh.position.z, nextStyle, mainObj.mesh.userData.color, mainObj.mesh.userData.height);
-                                objectsGroup.add(newMesh);
-                                cityMap.set(rawKey, { type: currentTool, mesh: newMesh });
-                                
-                                // 简单的弹出动画效果
-                                newMesh.scale.set(0.8, 0.8, 0.8);
-                                const animateIn = () => {
-                                    let s = newMesh.scale.x;
-                                    s += 0.05;
-                                    if(s <= 1) {
-                                        newMesh.scale.setScalar(s);
-                                        requestAnimationFrame(animateIn);
-                                    } else {
-                                        newMesh.scale.setScalar(1);
-                                    }
-                                };
-                                animateIn();
-                                return;
-                            }
-
-                            // 道路替换逻辑
-                            if (mainObj.type.startsWith('road') && currentTool.startsWith('road')) {
-                                objectsGroup.remove(mainObj.mesh);
-                                let newMesh;
-                                switch (currentTool) {
-                                    case 'road': newMesh = createRoad(rawGridX, rawGridZ); break;
-                                    case 'road_curve': newMesh = createCurveRoad(rawGridX, rawGridZ); break;
-                                    case 'road_cross': newMesh = createCrossRoad(rawGridX, rawGridZ); break;
-                                    case 'road_t': newMesh = createTRoad(rawGridX, rawGridZ); break;
-                                }
-                                newMesh.rotation.y = mainObj.mesh.rotation.y;
-                                newMesh.userData.orientation = mainObj.mesh.userData.orientation;
-                                
-                                objectsGroup.add(newMesh);
-                                cityMap.set(rawKey, { type: currentTool, mesh: newMesh });
-                            }
+                    // 道路替换逻辑
+                    if (mainObj.type.startsWith('road') && currentTool.startsWith('road')) {
+                        objectsGroup.remove(mainObj.mesh);
+                        let newMesh;
+                        switch (currentTool) {
+                            case 'road': newMesh = createRoad(rawGridX, rawGridZ); break;
+                            case 'road_curve': newMesh = createCurveRoad(rawGridX, rawGridZ); break;
+                            case 'road_cross': newMesh = createCrossRoad(rawGridX, rawGridZ); break;
+                            case 'road_t': newMesh = createTRoad(rawGridX, rawGridZ); break;
                         }
+                        newMesh.rotation.y = mainObj.mesh.rotation.y;
+                        newMesh.userData.orientation = mainObj.mesh.userData.orientation;
+                        
+                        objectsGroup.add(newMesh);
+                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: currentTool, mesh: newMesh });
                     }
                     return; // 如果被占用，无论是否发生旋转/替换，都不再执行后续建造
                 } else {
@@ -2385,6 +2491,7 @@
         // 注册事件监听器到容器上
         renderer.domElement.addEventListener('pointermove', onPointerMove);
         renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointerup', onPointerUp);
 
         // --- 6. UI 逻辑 ---
         const toolBtns = document.querySelectorAll('.tool-btn');
