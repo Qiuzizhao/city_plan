@@ -2,8 +2,10 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>迷你城市规划师</title>
+    <!-- 添加 Emoji 作为网页图标 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏙️</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 Three.js (优先使用 jsDelivr, 失败则回退) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/three@0.128.0/build/three.min.js';"></script>
@@ -334,6 +336,50 @@
         scene.add(rainSystem);
 
         // --- 3. 环境与地面设置 ---
+        // 生成云朵系统
+        const cloudsGroup = new THREE.Group();
+        scene.add(cloudsGroup);
+
+        function createCloud() {
+            const cloud = new THREE.Group();
+            const puffCount = 3 + Math.floor(Math.random() * 4);
+            const cloudMat = new THREE.MeshLambertMaterial({ 
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.8
+            });
+            windowMaterials.push(cloudMat); // 加入缓存以便在夜间或雨天变暗
+            cloudMat.userData = { isCloud: true };
+
+            for (let i = 0; i < puffCount; i++) {
+                const puffSize = 0.5 + Math.random() * 1.5;
+                const puffGeo = new THREE.SphereGeometry(puffSize, 7, 7);
+                const puff = new THREE.Mesh(puffGeo, cloudMat);
+                puff.position.set(
+                    (Math.random() - 0.5) * 2,
+                    (Math.random() - 0.5) * 1,
+                    (Math.random() - 0.5) * 2
+                );
+                cloud.add(puff);
+            }
+            return cloud;
+        }
+
+        // 随机在天空中散布一些云朵
+        for (let i = 0; i < 15; i++) {
+            const cloud = createCloud();
+            // 分布在较高的天空中，且在较广的范围内
+            cloud.position.set(
+                (Math.random() - 0.5) * 60,
+                15 + Math.random() * 10,
+                (Math.random() - 0.5) * 60
+            );
+            // 随机缩放
+            const scale = 1 + Math.random() * 1.5;
+            cloud.scale.set(scale, scale * 0.6, scale);
+            cloudsGroup.add(cloud);
+        }
+
         const gridSize = 30; // 30x30 的网格
         const cellSize = 1;
 
@@ -1991,9 +2037,6 @@
             const isBus = Math.random() < 0.2;
             const carMesh = isBus ? createBus() : createCar();
             
-            carMesh.position.set(startX, 0, startZ);
-            carsGroup.add(carMesh);
-
             // 随机一个移动方向 (0: +x, 1: -x, 2: +z, 3: -z)
             const dir = Math.floor(Math.random() * 4);
             let velocity = new THREE.Vector3();
@@ -2002,12 +2045,32 @@
             else if (dir === 2) { velocity.set(0, 0, 1); carMesh.rotation.y = -Math.PI / 2; }
             else { velocity.set(0, 0, -1); carMesh.rotation.y = Math.PI / 2; }
 
+            // 根据物理车道计算初始坐标（靠右侧 0.2 单位）
+            const rightOffset = 0.2;
+            let spawnX = startX;
+            let spawnZ = startZ;
+            
+            if (Math.abs(velocity.x) > 0.5) {
+                // 横向行驶，偏移Z轴：+X方向Z加0.2，-X方向Z减0.2
+                spawnZ += velocity.x * rightOffset;
+            } else {
+                // 纵向行驶，偏移X轴：+Z方向X减0.2，-Z方向X加0.2
+                spawnX += -velocity.z * rightOffset;
+            }
+
+            carMesh.position.set(spawnX, 0, spawnZ);
+            carsGroup.add(carMesh);
+
             // 公交车速度稍微慢一点
             const baseSpeed = isBus ? 0.015 : 0.02;
 
             activeCars.push({
                 mesh: carMesh,
                 velocity: velocity,
+                targetVelocity: velocity.clone(),
+                turnPoint: null,
+                currentGridKey: `${startX},${startZ}`,
+                hasTurnedInCurrentGrid: true, // 出生格子不需要立即转向
                 speed: baseSpeed + Math.random() * 0.01, // 随机速度
                 lifespan: 3000 + Math.random() * 3000 // 赋予随机寿命帧数 (延长消失时间)
             });
@@ -2056,152 +2119,115 @@
                     }
                 }
 
-                // 检查是否即将离开当前网格中心 (到达交叉口做决策)
-                const distToCenter = Math.abs(car.mesh.position.x - gridX) + Math.abs(car.mesh.position.z - gridZ);
-                
-                // 当接近网格中心且还在路上时，根据道路类型进行强制转向
-                if (currentRoad && distToCenter < 0.05 && !car.hasTurnedInCurrentGrid) {
-                    car.hasTurnedInCurrentGrid = true; // 防止在同一个格子内连续转弯
+                // 初始化或进入新网格时，计算目标方向和转向点
+                if (car.currentGridKey !== currentKey) {
+                    car.currentGridKey = currentKey;
                     
-                    const roadType = currentRoad.mesh.userData.roadType;
-                    const orientation = currentRoad.mesh.userData.orientation;
-                    
-                    // 当前车辆的行驶方向 (用向量表示，约等于)
-                    const vX = Math.round(car.velocity.x);
-                    const vZ = Math.round(car.velocity.z);
-
-                    if (roadType === 'curve') {
-                        // 弯道逻辑：根据进入方向强制指定出方向和最终朝向角度
-                        let targetVX = vX;
-                        let targetVZ = vZ;
-                        let targetRotY = car.mesh.rotation.y;
-                        let hasTurned = false;
+                    if (currentRoad) {
+                        const roadType = currentRoad.mesh.userData.roadType;
+                        const orientation = currentRoad.mesh.userData.orientation;
                         
-                        // 为了防止小车在弯道处由于速度方向和弯道期望方向不符导致冲出，
-                        // 我们需要严格检查小车的来向。如果来向不属于弯道的两个连接口之一，
-                        // 强制让它掉头。
+                        const vX = Math.round(car.velocity.x);
+                        const vZ = Math.round(car.velocity.z);
                         
-                        // orientation 0: 左下连接 (连接左边 x=-1 和 下边 z=1)
-                        if (orientation === 0) {
-                            if (vX === 1 && vZ === 0) { // 从左边来(速度为+x)，往右开 -> 转为往下开 (z=1)
-                                targetVX = 0; targetVZ = 1; targetRotY = -Math.PI / 2; hasTurned = true;
-                            } else if (vZ === -1 && vX === 0) { // 从下边来(速度为-z)，往上开 -> 转为往左开 (x=-1)
-                                targetVX = -1; targetVZ = 0; targetRotY = Math.PI; hasTurned = true;
-                            } else { // 开错方向，直接保持直行穿过，避免掉头后陷入死循环
-                                hasTurned = true;
+                        // 计算出路口的出口方向
+                        let targetVX = vX, targetVZ = vZ, targetRotY = car.mesh.rotation.y;
+                        
+                        if (roadType === 'curve') {
+                            if (orientation === 0) {
+                                if (vX === 1 && vZ === 0) { targetVX = 0; targetVZ = 1; }
+                                else if (vZ === -1 && vX === 0) { targetVX = -1; targetVZ = 0; }
+                            } else if (orientation === 1) {
+                                if (vX === -1 && vZ === 0) { targetVX = 0; targetVZ = 1; }
+                                else if (vZ === -1 && vX === 0) { targetVX = 1; targetVZ = 0; }
+                            } else if (orientation === 2) {
+                                if (vX === -1 && vZ === 0) { targetVX = 0; targetVZ = -1; }
+                                else if (vZ === 1 && vX === 0) { targetVX = 1; targetVZ = 0; }
+                            } else if (orientation === 3) {
+                                if (vX === 1 && vZ === 0) { targetVX = 0; targetVZ = -1; }
+                                else if (vZ === 1 && vX === 0) { targetVX = -1; targetVZ = 0; }
                             }
-                        } 
-                        // orientation 1: 右下连接 (连接右边 x=1 和 下边 z=1)
-                        else if (orientation === 1) {
-                            if (vX === -1 && vZ === 0) { // 从右边来，往左开 -> 转为往下开 (z=1)
-                                targetVX = 0; targetVZ = 1; targetRotY = -Math.PI / 2; hasTurned = true;
-                            } else if (vZ === -1 && vX === 0) { // 从下边来，往上开 -> 转为往右开 (x=1)
-                                targetVX = 1; targetVZ = 0; targetRotY = 0; hasTurned = true;
-                            } else {
-                                hasTurned = true;
+                        } else if (roadType === 'straight') {
+                            if (orientation % 2 === 0 && vX !== 0) {
+                                targetVX = 0; targetVZ = Math.random() > 0.5 ? 1 : -1;
+                            } else if (orientation % 2 === 1 && vZ !== 0) {
+                                targetVX = Math.random() > 0.5 ? 1 : -1; targetVZ = 0;
                             }
-                        } 
-                        // orientation 2: 右上连接 (连接右边 x=1 和 上边 z=-1)
-                        else if (orientation === 2) {
-                            if (vX === -1 && vZ === 0) { // 从右边来，往左开 -> 转为往上开 (z=-1)
-                                targetVX = 0; targetVZ = -1; targetRotY = Math.PI / 2; hasTurned = true;
-                            } else if (vZ === 1 && vX === 0) { // 从上边来，往下开 -> 转为往右开 (x=1)
-                                targetVX = 1; targetVZ = 0; targetRotY = 0; hasTurned = true;
+                        } else if (roadType === 'cross') {
+                            const rand = Math.random();
+                            if (rand < 0.33) { targetVX = vZ; targetVZ = -vX; } // 左转
+                            else if (rand < 0.66) { targetVX = -vZ; targetVZ = vX; } // 右转
+                        } else if (roadType === 't_junction') {
+                            let allowedDirs = [];
+                            if (orientation === 0) allowedDirs = [[-1, 0], [1, 0], [0, 1]];
+                            else if (orientation === 1) allowedDirs = [[0, -1], [0, 1], [1, 0]];
+                            else if (orientation === 2) allowedDirs = [[-1, 0], [1, 0], [0, -1]];
+                            else if (orientation === 3) allowedDirs = [[0, -1], [0, 1], [-1, 0]];
+                            const possibleExits = allowedDirs.filter(d => d[0] !== -vX || d[1] !== -vZ);
+                            if (possibleExits.length > 0) {
+                                const exit = possibleExits[Math.floor(Math.random() * possibleExits.length)];
+                                targetVX = exit[0]; targetVZ = exit[1];
                             } else {
-                                hasTurned = true;
-                            }
-                        } 
-                        // orientation 3: 左上连接 (连接左边 x=-1 和 上边 z=-1)
-                        else if (orientation === 3) {
-                            if (vX === 1 && vZ === 0) { // 从左边来，往右开 -> 转为往上开 (z=-1)
-                                targetVX = 0; targetVZ = -1; targetRotY = Math.PI / 2; hasTurned = true;
-                            } else if (vZ === 1 && vX === 0) { // 从上边来，往下开 -> 转为往左开 (x=-1)
-                                targetVX = -1; targetVZ = 0; targetRotY = Math.PI; hasTurned = true;
-                            } else {
-                                hasTurned = true;
+                                targetVX = -vX; targetVZ = -vZ; // 掉头
                             }
                         }
 
-                        if (hasTurned) {
-                            car.velocity.set(targetVX, 0, targetVZ);
-                            car.mesh.rotation.y = targetRotY;
-                        }
-                    } else if (roadType === 'straight') {
-                        // 直道逻辑：如果是纵向路(orientation 0或2)，且车是横向开的，强制转正
-                        if (orientation % 2 === 0 && vX !== 0) {
-                            const turnAngle = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
-                            car.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), turnAngle);
-                            car.mesh.rotation.y += turnAngle;
-                        } 
-                        // 如果是横向路(orientation 1或3)，且车是纵向开的，强制转正
-                        else if (orientation % 2 === 1 && vZ !== 0) {
-                            const turnAngle = Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2;
-                            car.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), turnAngle);
-                            car.mesh.rotation.y += turnAngle;
-                        }
-                    } else if (roadType === 'cross') {
-                        // 十字路口逻辑：直行、左转、右转随机 (各占约 1/3)
-                        const rand = Math.random();
-                        if (rand < 0.33) {
-                            // 左转
-                            car.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-                            car.mesh.rotation.y += Math.PI / 2;
-                        } else if (rand < 0.66) {
-                            // 右转
-                            car.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
-                            car.mesh.rotation.y -= Math.PI / 2;
-                        }
-                        // 剩下的情况保持直行，不需要改速度和角度
-                    } else if (roadType === 't_junction') {
-                        // T型路口逻辑：
-                        // orientation 0: 上方平直(连接 -x, +x)，下方分支(连接 +z)
-                        // orientation 1: 左侧平直(连接 -z, +z)，右方分支(连接 +x)
-                        // orientation 2: 下方平直(连接 -x, +x)，上方分支(连接 -z)
-                        // orientation 3: 右侧平直(连接 -z, +z)，左方分支(连接 -x)
-                        
-                        // 简单处理：先找出该 T 型路口允许通行的 3 个方向
-                        let allowedDirs = []; // 存储允许驶出的速度向量 [x, z]
-                        if (orientation === 0) allowedDirs = [[-1, 0], [1, 0], [0, 1]];
-                        else if (orientation === 1) allowedDirs = [[0, -1], [0, 1], [1, 0]];
-                        else if (orientation === 2) allowedDirs = [[-1, 0], [1, 0], [0, -1]];
-                        else if (orientation === 3) allowedDirs = [[0, -1], [0, 1], [-1, 0]];
-                        
-                        // 从允许的方向中，去掉当前的来向(即不能掉头)
-                        const incomingDir = [-vX, -vZ]; // 比如往右开 [1,0]，来向就是 [-1,0]
-                        const possibleExits = allowedDirs.filter(d => d[0] !== incomingDir[0] || d[1] !== incomingDir[1]);
-                        
-                        if (possibleExits.length > 0) {
-                            // 随机选择一个出口
-                            const exit = possibleExits[Math.floor(Math.random() * possibleExits.length)];
+                        // 如果目标方向和当前方向不同，则需要转向
+                        if (targetVX !== vX || targetVZ !== vZ) {
+                            car.targetVelocity.set(targetVX, 0, targetVZ);
                             
-                            // 计算转向角度
-                            if (exit[0] !== vX || exit[1] !== vZ) {
-                                // 需要转弯
-                                if ((vX === 1 && exit[1] === 1) || (vX === -1 && exit[1] === -1) || 
-                                    (vZ === 1 && exit[0] === -1) || (vZ === -1 && exit[0] === 1)) {
-                                    // 右转 (-90度)
-                                    car.mesh.rotation.y -= Math.PI / 2;
-                                } else {
-                                    // 左转 (+90度)
-                                    car.mesh.rotation.y += Math.PI / 2;
-                                }
-                                car.velocity.set(exit[0], 0, exit[1]);
+                            // 确定目标朝向
+                            if (targetVX === 1) targetRotY = 0;
+                            else if (targetVX === -1) targetRotY = Math.PI;
+                            else if (targetVZ === 1) targetRotY = -Math.PI / 2;
+                            else if (targetVZ === -1) targetRotY = Math.PI / 2;
+                            car.targetRotY = targetRotY;
+
+                            // 计算转向交点 (Turn Point)
+                            // 物理车道靠右偏移0.2
+                            const rightOffset = 0.2;
+                            if (targetVX === -vX && targetVZ === -vZ) {
+                                // 网格内的特殊掉头
+                                car.turnPoint = {
+                                    x: gridX + (targetVZ === 0 ? 0 : -targetVZ * rightOffset),
+                                    z: gridZ + (targetVX === 0 ? 0 : targetVX * rightOffset)
+                                };
+                            } else {
+                                car.turnPoint = {
+                                    x: gridX - (vZ + targetVZ) * rightOffset,
+                                    z: gridZ + (vX + targetVX) * rightOffset
+                                };
                             }
                         } else {
-                            // 如果是从“墙”撞进来的（走错路了），直接掉头
-                            car.velocity.set(-vX, 0, -vZ);
-                            car.mesh.rotation.y += Math.PI;
+                            car.turnPoint = null; // 直行不需要转向点
                         }
                     }
-                    
-                    // 修正速度向量避免浮点误差
-                    car.velocity.x = Math.round(car.velocity.x);
-                    car.velocity.z = Math.round(car.velocity.z);
                 }
 
-                // 离开网格中心一段距离后，重置转向标记
-                if (distToCenter > 0.2) {
-                    car.hasTurnedInCurrentGrid = false;
+                // 移动车辆
+                car.mesh.position.addScaledVector(car.velocity, car.speed);
+
+                // 检查是否到达转向点
+                if (car.turnPoint) {
+                    const vX = Math.round(car.velocity.x);
+                    const vZ = Math.round(car.velocity.z);
+                    let passed = false;
+                    
+                    if (vX === 1 && car.mesh.position.x >= car.turnPoint.x) passed = true;
+                    else if (vX === -1 && car.mesh.position.x <= car.turnPoint.x) passed = true;
+                    else if (vZ === 1 && car.mesh.position.z >= car.turnPoint.z) passed = true;
+                    else if (vZ === -1 && car.mesh.position.z <= car.turnPoint.z) passed = true;
+
+                    if (passed) {
+                        // 瞬间对齐到交点，执行转向
+                        car.mesh.position.x = car.turnPoint.x;
+                        car.mesh.position.z = car.turnPoint.z;
+                        
+                        car.velocity.copy(car.targetVelocity);
+                        car.mesh.rotation.y = car.targetRotY;
+                        
+                        car.turnPoint = null; // 转向完成
+                    }
                 }
 
                 // 如果开出边界或开出道路，则销毁车辆或掉头
@@ -2217,8 +2243,16 @@
                     car.velocity.set(-car.velocity.x, 0, -car.velocity.z);
                     car.mesh.rotation.y += Math.PI;
                     
-                    // 为了防止在道路边缘反复触发掉头，需要把车往回推一点点
+                    // 切换到对向物理车道
+                    const rightOffset = 0.2;
+                    if (Math.abs(car.velocity.x) > 0.5) {
+                        car.mesh.position.z = gridZ + car.velocity.x * rightOffset;
+                    } else {
+                        car.mesh.position.x = gridX - car.velocity.z * rightOffset;
+                    }
+
                     car.mesh.position.addScaledVector(car.velocity, car.speed * 2);
+                    car.currentGridKey = null; // 强制重新计算所在网格逻辑
                 }
             }
         }
@@ -2530,6 +2564,7 @@
                 timeIcon.textContent = '🌙';
                 timeText.textContent = '夜晚';
                 scene.background = new THREE.Color(0x0f172a); // 深蓝色夜空
+                scene.fog.color.setHex(0x0f172a);
                 ambientLight.intensity = 0.1;
                 dirLight.intensity = 0.2;
                 // 开启建筑和车辆发光
@@ -2538,6 +2573,8 @@
                         mat.opacity = 1; // 车灯通过透明度控制显示
                     } else if (mat.userData && mat.userData.isStructureRing) {
                         mat.emissiveIntensity = 0.3; // 春笋大厦的结构线微亮
+                    } else if (mat.userData && mat.userData.isCloud) {
+                        mat.color.setHex(0x334155); // 云朵在夜晚变暗
                     } else {
                         // 如果是汽车车身/车顶，发光弱一点，如果是建筑，发光强一点
                         mat.emissiveIntensity = mat.userData && mat.userData.isCarBody ? 0.4 : 0.7;
@@ -2546,13 +2583,17 @@
             } else {
                 timeIcon.textContent = '☀️';
                 timeText.textContent = '白天';
-                scene.background = new THREE.Color(0x87CEEB); // 恢复白天天空
-                ambientLight.intensity = 0.6;
-                dirLight.intensity = 0.8;
+                const skyColor = isRaining ? 0x64748b : 0x87CEEB;
+                scene.background = new THREE.Color(skyColor); // 恢复白天天空
+                scene.fog.color.setHex(skyColor);
+                ambientLight.intensity = isRaining ? 0.4 : 0.6;
+                dirLight.intensity = isRaining ? 0.3 : 0.8;
                 // 关闭建筑和车辆发光
                 windowMaterials.forEach(mat => {
                     if (mat.userData && mat.userData.isCarLight) {
                         mat.opacity = 0;
+                    } else if (mat.userData && mat.userData.isCloud) {
+                        mat.color.setHex(isRaining ? 0x94a3b8 : 0xffffff); // 云朵在白天恢复白色或阴天灰
                     } else {
                         mat.emissiveIntensity = 0;
                     }
@@ -2570,8 +2611,15 @@
                 // 雨天光线变暗
                 if (!isNight) {
                     scene.background = new THREE.Color(0x64748b); // 阴天灰色
+                    scene.fog.color.setHex(0x64748b);
                     ambientLight.intensity = 0.4;
                     dirLight.intensity = 0.3;
+                    // 云层变暗
+                    windowMaterials.forEach(mat => {
+                        if (mat.userData && mat.userData.isCloud) {
+                            mat.color.setHex(0x94a3b8);
+                        }
+                    });
                 }
             } else {
                 weatherIcon.textContent = '🌤️';
@@ -2580,8 +2628,15 @@
                 // 恢复光线
                 if (!isNight) {
                     scene.background = new THREE.Color(0x87CEEB);
+                    scene.fog.color.setHex(0x87CEEB);
                     ambientLight.intensity = 0.6;
                     dirLight.intensity = 0.8;
+                    // 云层恢复白色
+                    windowMaterials.forEach(mat => {
+                        if (mat.userData && mat.userData.isCloud) {
+                            mat.color.setHex(0xffffff);
+                        }
+                    });
                 }
             }
         });
