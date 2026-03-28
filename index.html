@@ -2284,6 +2284,31 @@
                                 return;
                             }
 
+                            // 更换样式逻辑：同种工具点击
+                            if (mainObj.type === currentTool && currentTool === 'commercial') {
+                                objectsGroup.remove(mainObj.mesh);
+                                let nextStyle = (mainObj.mesh.userData.style + 1) % 5;
+                                // 保持原有的颜色和高度，仅更换形状
+                                let newMesh = createCommercial(mainObj.mesh.position.x, mainObj.mesh.position.z, nextStyle, mainObj.mesh.userData.color, mainObj.mesh.userData.height);
+                                objectsGroup.add(newMesh);
+                                cityMap.set(rawKey, { type: currentTool, mesh: newMesh });
+                                
+                                // 简单的弹出动画效果
+                                newMesh.scale.set(0.8, 0.8, 0.8);
+                                const animateIn = () => {
+                                    let s = newMesh.scale.x;
+                                    s += 0.05;
+                                    if(s <= 1) {
+                                        newMesh.scale.setScalar(s);
+                                        requestAnimationFrame(animateIn);
+                                    } else {
+                                        newMesh.scale.setScalar(1);
+                                    }
+                                };
+                                animateIn();
+                                return;
+                            }
+
                             // 道路替换逻辑
                             if (mainObj.type.startsWith('road') && currentTool.startsWith('road')) {
                                 objectsGroup.remove(mainObj.mesh);
