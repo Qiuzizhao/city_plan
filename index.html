@@ -175,7 +175,16 @@
 
         <!-- 存档系统面板 -->
         <div class="bg-white/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-gray-100 flex flex-col gap-2 pointer-events-auto mt-2">
-            <div class="text-xs font-bold text-gray-500 text-center uppercase tracking-wider mb-1">存档管理</div>
+            <div class="text-xs font-bold text-gray-500 text-center uppercase tracking-wider mb-1">高度控制</div>
+            <div class="flex gap-2">
+                <button id="elevate-btn" class="flex-1 bg-purple-100 hover:bg-purple-200 text-purple-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="提升道路高度(建高架)">
+                    <span>⬆️</span> 提升
+                </button>
+                <button id="lower-btn" class="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="降低道路高度">
+                    <span>⬇️</span> 降低
+                </button>
+            </div>
+            <div class="text-xs font-bold text-gray-500 text-center uppercase tracking-wider mb-1 mt-1">存档管理</div>
             <div class="flex gap-2">
                 <button id="save-btn" class="flex-1 bg-green-100 hover:bg-green-200 text-green-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="保存到浏览器">
                     <span>💾</span> 保存
@@ -445,7 +454,47 @@
 
         // --- 4. 城市数据与构建系统 ---
         let currentTool = 'residential';
-        const cityMap = new Map(); // 存储网格上的对象: "x,z" -> mesh
+        // 数据结构升级：cityMap 支持多层高度，键名依然为 "x,z" 但值为数组
+        // 形如：{ "1,2": [ { level: 0, type: 'water', mesh: ... }, { level: 1, type: 'bridge', mesh: ... } ] }
+        const cityMap = new Map(); // 存储网格上的对象: "x,z" -> [{level, type, mesh}]
+        
+        // 辅助函数：获取指定层级的对象
+        function getObjAtLevel(key, level) {
+            const arr = cityMap.get(key);
+            if (!arr) return null;
+            return arr.find(item => item.level === level) || null;
+        }
+
+        // 辅助函数：设置指定层级的对象
+        function setObjAtLevel(key, level, objData) {
+            let arr = cityMap.get(key);
+            if (!arr) {
+                arr = [];
+                cityMap.set(key, arr);
+            }
+            const existingIndex = arr.findIndex(item => item.level === level);
+            objData.level = level;
+            if (existingIndex >= 0) {
+                arr[existingIndex] = objData;
+            } else {
+                arr.push(objData);
+            }
+            // 按 level 升序排序
+            arr.sort((a, b) => a.level - b.level);
+        }
+
+        // 辅助函数：删除指定层级的对象
+        function deleteObjAtLevel(key, level) {
+            let arr = cityMap.get(key);
+            if (!arr) return;
+            const newArr = arr.filter(item => item.level !== level);
+            if (newArr.length === 0) {
+                cityMap.delete(key);
+            } else {
+                cityMap.set(key, newArr);
+            }
+        }
+
         const objectsGroup = new THREE.Group();
         scene.add(objectsGroup);
 
@@ -1175,19 +1224,17 @@
             return group;
         }
 
-        // 生成桥梁 (Bridge) - 跨越水面的道路
-        function createBridge(x, z) {
+        // 生成桥梁 (Bridge) - 跨越水面的道路，支持多层
+        function createBridge(x, z, level = 1) {
             const group = new THREE.Group();
-            group.userData = { isRoad: true, roadType: 'straight', orientation: 0, baseType: 'water' }; // 基础类型是水面
+            group.userData = { isRoad: true, roadType: 'straight', orientation: 0, level: level };
             
-            // 1. 底层水面 (保留水面视觉效果)
-            const waterGroup = createWater(0, 0); // 相对坐标 0,0
-            group.add(waterGroup);
-
-            // 2. 桥面结构 (稍微抬高)
-            const bridgeHeight = 0.2; // 桥面高度
+            // 计算当前层级的绝对高度
+            // 地面高度 0，每层高度设为 0.5
+            const levelHeight = 0.5;
+            const bridgeHeight = level * levelHeight;
             
-            // 桥面主体
+            // 1. 桥面主体
             const deckGeo = new THREE.BoxGeometry(0.8, 0.05, 1);
             const deckMat = new THREE.MeshLambertMaterial({ color: 0x475569 }); // 沥青色
             const deck = new THREE.Mesh(deckGeo, deckMat);
@@ -1209,7 +1256,7 @@
             dash2.position.set(0, bridgeHeight + 0.026, -0.25);
             group.add(dash2);
             
-            // 3. 桥梁护栏
+            // 2. 桥梁护栏
             const railGeo = new THREE.BoxGeometry(0.05, 0.15, 1);
             const railMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 }); // 浅灰色护栏
             
@@ -1223,32 +1270,131 @@
             railR.castShadow = true;
             group.add(railR);
             
-            // 4. 桥墩 (支撑在水中)
+            // 3. 桥墩 (支撑到底部，高度为 bridgeHeight)
+            // 为了防止桥墩穿透底下的道路，桥墩只在四角且较细
             const pillarGeo = new THREE.CylinderGeometry(0.05, 0.05, bridgeHeight, 8);
             const pillarMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
             
             const p1 = new THREE.Mesh(pillarGeo, pillarMat);
-            p1.position.set(-0.25, bridgeHeight / 2, 0.3);
+            p1.position.set(-0.3, bridgeHeight / 2, 0.4);
             p1.castShadow = true;
             group.add(p1);
             
             const p2 = new THREE.Mesh(pillarGeo, pillarMat);
-            p2.position.set(0.25, bridgeHeight / 2, 0.3);
+            p2.position.set(0.3, bridgeHeight / 2, 0.4);
             p2.castShadow = true;
             group.add(p2);
             
             const p3 = new THREE.Mesh(pillarGeo, pillarMat);
-            p3.position.set(-0.25, bridgeHeight / 2, -0.3);
+            p3.position.set(-0.3, bridgeHeight / 2, -0.4);
             p3.castShadow = true;
             group.add(p3);
             
             const p4 = new THREE.Mesh(pillarGeo, pillarMat);
-            p4.position.set(0.25, bridgeHeight / 2, -0.3);
+            p4.position.set(0.3, bridgeHeight / 2, -0.4);
             p4.castShadow = true;
             group.add(p4);
 
             group.position.set(x, 0, z);
             return group;
+        }
+
+        // 生成坡道 (Ramp)
+        function createRamp(x, z, levelStart = 0, levelEnd = 1, orientation = 0) {
+            const group = new THREE.Group();
+            group.userData = { isRoad: true, roadType: 'ramp', orientation: orientation, levelStart: levelStart, levelEnd: levelEnd };
+            
+            const levelHeight = 0.5;
+            const startH = levelStart * levelHeight;
+            const endH = levelEnd * levelHeight;
+            
+            // 坡道主体
+            const length = 1; // 跨越一个格子
+            const thickness = 0.05;
+            const width = 0.8;
+            
+            const deckGeo = new THREE.BoxGeometry(width, thickness, length);
+            const deckMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const deck = new THREE.Mesh(deckGeo, deckMat);
+            
+            // 计算倾斜角度 (俯仰角)
+            const heightDiff = endH - startH;
+            const angle = Math.atan2(heightDiff, length);
+            
+            // 设置中心点高度
+            deck.position.set(0, (startH + endH) / 2, 0);
+            deck.rotation.x = -angle; // 倾斜
+            
+            deck.castShadow = true;
+            deck.receiveShadow = true;
+            group.add(deck);
+
+            // 护栏
+            const railGeo = new THREE.BoxGeometry(0.05, 0.15, length);
+            const railMat = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+            
+            const railL = new THREE.Mesh(railGeo, railMat);
+            railL.position.set(-0.375, (startH + endH) / 2 + 0.1, 0);
+            railL.rotation.x = -angle;
+            group.add(railL);
+            
+            const railR = new THREE.Mesh(railGeo, railMat);
+            railR.position.set(0.375, (startH + endH) / 2 + 0.1, 0);
+            railR.rotation.x = -angle;
+            group.add(railR);
+
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        // 更新周围的坡道
+        function updateRampsAround(x, z, targetLevel) {
+            const directions = [
+                { dx: 0, dz: -1, orientation: 0 }, // 北 -> 南
+                { dx: 0, dz: 1, orientation: 2 },  // 南 -> 北
+                { dx: -1, dz: 0, orientation: 1 }, // 西 -> 东
+                { dx: 1, dz: 0, orientation: 3 }   // 东 -> 西
+            ];
+
+            directions.forEach(dir => {
+                const nx = x + dir.dx;
+                const nz = z + dir.dz;
+                const nKey = `${nx},${nz}`;
+                const cellObjs = cityMap.get(nKey) || [];
+                if (cellObjs.length === 0) return;
+
+                // 获取相邻网格的最高层对象
+                const topObj = cellObjs[cellObjs.length - 1];
+                if (!topObj || !(topObj.type.startsWith('road') || topObj.type === 'bridge' || topObj.type === 'ramp')) return;
+
+                const nLevel = topObj.level;
+                
+                // 如果相邻道路高度差为 1，将其变为坡道
+                if (Math.abs(nLevel - targetLevel) === 1) {
+                    objectsGroup.remove(topObj.mesh);
+                    deleteObjAtLevel(nKey, nLevel);
+                    
+                    const newRamp = createRamp(nx, nz, nLevel, targetLevel, dir.orientation);
+                    newRamp.rotation.y = dir.orientation * (Math.PI / 2); // 旋转以对齐
+                    objectsGroup.add(newRamp);
+                    setObjAtLevel(nKey, nLevel, { type: 'ramp', mesh: newRamp });
+                } 
+                // 如果相邻本来是坡道，且现在两者高度一致了，将相邻变为平路/桥
+                else if (nLevel === targetLevel && topObj.type === 'ramp') {
+                    objectsGroup.remove(topObj.mesh);
+                    deleteObjAtLevel(nKey, nLevel);
+                    
+                    let newMesh;
+                    if (targetLevel === 0) {
+                        newMesh = createRoad(nx, nz);
+                        setObjAtLevel(nKey, 0, { type: 'road', mesh: newMesh });
+                    } else {
+                        newMesh = createBridge(nx, nz, targetLevel);
+                        setObjAtLevel(nKey, targetLevel, { type: 'bridge', mesh: newMesh });
+                    }
+                    if (newMesh) objectsGroup.add(newMesh);
+                }
+            });
         }
 
         // 生成花田 (Flower Field) - 平面贴图样式
@@ -2135,18 +2281,21 @@
         function spawnCar() {
             // 找到所有道路
             const roadKeys = [];
-            cityMap.forEach((obj, key) => {
-                if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t' || obj.type === 'bridge') {
-                    roadKeys.push(key);
-                }
+            cityMap.forEach((cellObjs, key) => {
+                cellObjs.forEach(obj => {
+                    if (obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp') {
+                        roadKeys.push({ key, level: obj.level, obj });
+                    }
+                });
             });
 
             if (roadKeys.length === 0) return; // 没有道路不生成车
             if (activeCars.length > Math.min(20, roadKeys.length * 2)) return; // 限制车辆总数
 
             // 随机选一个起点道路
-            const startKey = roadKeys[Math.floor(Math.random() * roadKeys.length)];
-            const [startX, startZ] = startKey.split(',').map(Number);
+            const startNode = roadKeys[Math.floor(Math.random() * roadKeys.length)];
+            const [startX, startZ] = startNode.key.split(',').map(Number);
+            const startLevel = startNode.level;
 
             // 20%的概率生成公交车，80%生成小汽车
             const isBus = Math.random() < 0.2;
@@ -2164,6 +2313,7 @@
             const rightOffset = 0.2;
             let spawnX = startX;
             let spawnZ = startZ;
+            let spawnY = startLevel * 0.5; // 根据层级设置高度
             
             if (Math.abs(velocity.x) > 0.5) {
                 // 横向行驶，偏移Z轴：+X方向Z加0.2，-X方向Z减0.2
@@ -2173,7 +2323,7 @@
                 spawnX += -velocity.z * rightOffset;
             }
 
-            carMesh.position.set(spawnX, 0, spawnZ);
+            carMesh.position.set(spawnX, spawnY, spawnZ);
             carsGroup.add(carMesh);
 
             // 公交车速度稍微慢一点
@@ -2184,7 +2334,8 @@
                 velocity: velocity,
                 targetVelocity: velocity.clone(),
                 turnPoint: null,
-                currentGridKey: `${startX},${startZ}`,
+                currentGridKey: startNode.key,
+                currentLevel: startLevel,
                 hasTurnedInCurrentGrid: true, // 出生格子不需要立即转向
                 speed: baseSpeed + Math.random() * 0.01, // 随机速度
                 lifespan: 3000 + Math.random() * 3000 // 赋予随机寿命帧数 (延长消失时间)
@@ -2218,21 +2369,66 @@
                     continue;
                 }
                 
-                // 移动车辆
-                car.mesh.position.addScaledVector(car.velocity, car.speed);
+                // 移动车辆 (水平移动)
+                car.mesh.position.x += car.velocity.x * car.speed;
+                car.mesh.position.z += car.velocity.z * car.speed;
 
                 // 获取当前所在的网格坐标
                 const gridX = Math.floor(car.mesh.position.x) + 0.5;
                 const gridZ = Math.floor(car.mesh.position.z) + 0.5;
                 const currentKey = `${gridX},${gridZ}`;
 
+                // 动态更新车辆当前层级（通过其实际高度判断，允许有一定的误差）
+                car.currentLevel = Math.round(car.mesh.position.y / 0.5);
+
                 let currentRoad = null;
                 if (cityMap.has(currentKey)) {
-                    const obj = cityMap.get(currentKey);
-                    if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t' || obj.type === 'bridge') {
-                        currentRoad = obj;
+                    const cellObjs = cityMap.get(currentKey);
+                    // 寻找匹配当前层级的道路或坡道
+                    currentRoad = cellObjs.find(obj => {
+                        if (!(obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp')) return false;
+                        if (obj.type === 'ramp') {
+                            return obj.mesh.userData.levelStart === car.currentLevel || obj.mesh.userData.levelEnd === car.currentLevel;
+                        }
+                        return obj.level === car.currentLevel;
+                    });
+                }
+
+                // 高度与俯仰角计算
+                const prevY = car.mesh.position.y;
+                let targetY = prevY;
+
+                if (currentRoad) {
+                    if (currentRoad.type === 'ramp') {
+                        const rampData = currentRoad.mesh.userData;
+                        const px = car.mesh.position.x - gridX;
+                        const pz = car.mesh.position.z - gridZ;
+                        let progress = 0;
+                        if (rampData.orientation === 0) progress = pz + 0.5;
+                        else if (rampData.orientation === 1) progress = px + 0.5;
+                        else if (rampData.orientation === 2) progress = 0.5 - pz;
+                        else if (rampData.orientation === 3) progress = 0.5 - px;
+                        
+                        targetY = (1 - progress) * (rampData.levelStart * 0.5) + progress * (rampData.levelEnd * 0.5);
+                    } else {
+                        targetY = currentRoad.level * 0.5;
                     }
                 }
+
+                // 平滑过渡高度并计算俯仰角
+                car.mesh.position.y = targetY;
+                const dy = targetY - prevY;
+                
+                // 因为汽车模型的车头朝向是 +X，所以俯仰角应该是围绕Z轴的旋转
+                // 我们限制最大俯仰角，防止在刚进入平路时瞬间抖动
+                const maxSin = Math.max(-1, Math.min(1, dy / car.speed));
+                let targetPitch = Math.asin(maxSin);
+                
+                // 平滑俯仰角
+                if (currentRoad && currentRoad.type !== 'ramp') {
+                    targetPitch = 0;
+                }
+                car.mesh.rotation.z = car.mesh.rotation.z * 0.8 + targetPitch * 0.2;
 
                 // 初始化或进入新网格时，计算目标方向和转向点
                 if (car.currentGridKey !== currentKey) {
@@ -2318,9 +2514,6 @@
                         }
                     }
                 }
-
-                // 移动车辆
-                car.mesh.position.addScaledVector(car.velocity, car.speed);
 
                 // 检查是否到达转向点
                 if (car.turnPoint) {
@@ -2421,7 +2614,10 @@
                     cursor.visible = true;
                     
                     // 根据工具状态更新光标颜色
-                    if (currentTool === 'demolish') {
+                    if (elevationMode) {
+                        cursorMat.color.setHex(0x9333ea); // 紫色表示高度模式
+                        cursorMat.opacity = 0.8;
+                    } else if (currentTool === 'demolish') {
                         cursorMat.color.setHex(0xef4444); // 红色
                     } else if (currentTool === 'pointer') {
                         cursorMat.color.setHex(0xffffff); // 白色 (选择模式)
@@ -2472,24 +2668,37 @@
             const dist = Math.hypot(event.clientX - pointerDownCoords.x, event.clientY - pointerDownCoords.y);
             // 如果距离大于 10px，判定为滑动（旋转/平移视角），不触发点击建造
             if (dist > 10) return;
-            
-            // 如果当前工具是“选择/指针”，则不执行任何操作，仅用于查看
-            if (currentTool === 'pointer') return;
 
             // 重新执行射线检测获取精确坐标（由于移动端没有hover状态，必须在此处重新检测）
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(interactPlane);
 
-            if (intersects.length === 0) return;
+            // 如果当前工具是拆除工具，我们应该对所有场景物体进行射线检测，以便精准点选（无论是地面的房子还是高架桥）
+            let intersectObj = null;
+            if (currentTool === 'demolish' || elevationMode) {
+                // 不仅仅检测地面，检测所有建筑和道路
+                const allIntersects = raycaster.intersectObjects(objectsGroup.children, true);
+                if (allIntersects.length > 0) {
+                    // 向上查找，直到找到包含 userData 的 Mesh 或 Group
+                    let hit = allIntersects[0].object;
+                    while (hit && (!hit.userData || (!hit.userData.isRoad && !hit.userData.type && !hit.userData.isBuilding && !hit.userData.isTree && !hit.userData.isGreen && !hit.userData.isWater && !hit.parent?.userData?.isRoad && !hit.parent?.userData?.isBuilding))) {
+                        hit = hit.parent;
+                    }
+                    if (hit) {
+                        intersectObj = hit.userData.isRoad || hit.userData.type || hit.userData.isBuilding || hit.userData.isTree || hit.userData.isGreen || hit.userData.isWater ? hit : hit.parent;
+                    }
+                }
+            }
 
-            const intersect = intersects[0];
+            const intersectsPlane = raycaster.intersectObject(interactPlane);
+            if (intersectsPlane.length === 0) return;
+
+            const intersect = intersectsPlane[0];
             const rawGridX = Math.floor(intersect.point.x) + 0.5;
             const rawGridZ = Math.floor(intersect.point.z) + 0.5;
 
             let size = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(currentTool) ? 2 : 1;
-            // offsetX 和 offsetZ 仅用于网格渲染，在逻辑中不需要使用
             
             const gridX = rawGridX;
             const gridZ = rawGridZ;
@@ -2499,6 +2708,71 @@
             if (!(gridX >= -limit && gridX + (size - 1) <= limit && gridZ >= -limit && gridZ + (size - 1) <= limit)) {
                 return;
             }
+
+            const key = `${gridX},${gridZ}`;
+
+            // 获取该网格最高层的对象 (默认逻辑)
+            const cellObjs = cityMap.get(key) || [];
+            let topLevel = cellObjs.length > 0 ? cellObjs[cellObjs.length - 1].level : 0;
+            let topObj = cellObjs.length > 0 ? cellObjs[cellObjs.length - 1] : null;
+
+            // 如果精准点选到了某个特定的 3D 模型（用于拆除和高度调整），覆盖默认的 topObj
+            if (intersectObj && cellObjs.length > 0) {
+                const foundObj = cellObjs.find(o => o.mesh === intersectObj || (o.mainKey && getObjAtLevel(o.mainKey, o.level)?.mesh === intersectObj));
+                if (foundObj) {
+                    topObj = foundObj;
+                    topLevel = foundObj.level;
+                }
+            }
+
+            // 如果当前处于高度调整模式，处理道路的高度升降
+            if (elevationMode) {
+                if (topObj && (topObj.type.startsWith('road') || topObj.type === 'bridge' || topObj.type === 'ramp')) {
+                    // 只允许对道路或桥梁调整高度
+                    const currentLevel = topObj.level;
+                    let targetLevel = currentLevel;
+                    
+                    if (elevationMode === 'up') targetLevel++;
+                    if (elevationMode === 'down' && currentLevel > 0) targetLevel--;
+                    
+                    if (targetLevel !== currentLevel) {
+                        // 移除旧网格
+                        objectsGroup.remove(topObj.mesh);
+                        deleteObjAtLevel(key, currentLevel);
+                        
+                        let newMesh;
+                        if (targetLevel === 0) {
+                            // 降回到地面，变成普通道路
+                            const type = topObj.type === 'bridge' || topObj.type === 'ramp' ? 'road' : topObj.type;
+                            if (type === 'road') newMesh = createRoad(gridX, gridZ);
+                            else if (type === 'road_curve') newMesh = createCurveRoad(gridX, gridZ);
+                            else if (type === 'road_cross') newMesh = createCrossRoad(gridX, gridZ);
+                            else if (type === 'road_t') newMesh = createTRoad(gridX, gridZ);
+                            
+                            if (newMesh && topObj.mesh.userData.orientation !== undefined) {
+                                newMesh.rotation.y = topObj.mesh.userData.orientation * (Math.PI / 2);
+                                newMesh.userData.orientation = topObj.mesh.userData.orientation;
+                            }
+                            setObjAtLevel(key, 0, { type: type, mesh: newMesh });
+                        } else {
+                            // 提升为桥梁/高架
+                            newMesh = createBridge(gridX, gridZ, targetLevel);
+                            if (topObj.mesh.userData.orientation !== undefined) {
+                                newMesh.rotation.y = topObj.mesh.userData.orientation * (Math.PI / 2);
+                                newMesh.userData.orientation = topObj.mesh.userData.orientation;
+                            }
+                            setObjAtLevel(key, targetLevel, { type: 'bridge', mesh: newMesh });
+                        }
+                        
+                        if (newMesh) objectsGroup.add(newMesh);
+                        updateRampsAround(gridX, gridZ, targetLevel); // 触发周围坡道更新
+                    }
+                }
+                return;
+            }
+
+            // 如果当前工具是“选择/指针”，且没有高度模式，则不执行任何操作
+            if (currentTool === 'pointer') return;
 
             // 检查是否靠近边缘并触发自动扩建
             // 确保建筑距离边缘永远有两行以上 (即 limit - max(|gridX|, |gridZ|) <= 2)
@@ -2516,36 +2790,42 @@
                 expandGrid();
             }
 
-            const key = `${gridX},${gridZ}`;
-
             if (currentTool === 'demolish') {
                 // 拆除逻辑
-                if (cityMap.has(key)) {
-                    const obj = cityMap.get(key);
+                if (topObj) {
+                    // 如果是在高度调整模式下，忽略拆除操作
+                    if (elevationMode) return;
+                    
                     // 桥梁特殊拆除逻辑：恢复水面
-                    if (obj.type === 'bridge') {
-                        objectsGroup.remove(obj.mesh);
-                        const newWaterMesh = createWater(gridX, gridZ);
-                        objectsGroup.add(newWaterMesh);
-                        cityMap.set(key, { type: 'water', mesh: newWaterMesh });
+                    if (topObj.type === 'bridge') {
+                        objectsGroup.remove(topObj.mesh);
+                        deleteObjAtLevel(key, topLevel);
+                        
+                        // 检查下一层是否有水面，如果没有则生成
+                        const baseObj = getObjAtLevel(key, 0);
+                        if (!baseObj || baseObj.type !== 'water') {
+                            const newWaterMesh = createWater(gridX, gridZ);
+                            objectsGroup.add(newWaterMesh);
+                            setObjAtLevel(key, 0, { type: 'water', mesh: newWaterMesh });
+                        }
                         return;
                     }
 
                     // 如果是占多格的建筑（非主节点）
-                    if (obj.mainKey) {
-                        const mainObj = cityMap.get(obj.mainKey);
+                    if (topObj.mainKey) {
+                        const mainObj = getObjAtLevel(topObj.mainKey, topLevel);
                         if (mainObj) {
                             objectsGroup.remove(mainObj.mesh);
                             if (mainObj.mesh.userData.occupiedKeys) {
-                                mainObj.mesh.userData.occupiedKeys.forEach(k => cityMap.delete(k));
+                                mainObj.mesh.userData.occupiedKeys.forEach(k => deleteObjAtLevel(k, topLevel));
                             }
                         }
                     } else {
-                        objectsGroup.remove(obj.mesh);
-                        if (obj.mesh.userData.occupiedKeys) {
-                            obj.mesh.userData.occupiedKeys.forEach(k => cityMap.delete(k));
+                        objectsGroup.remove(topObj.mesh);
+                        if (topObj.mesh.userData.occupiedKeys) {
+                            topObj.mesh.userData.occupiedKeys.forEach(k => deleteObjAtLevel(k, topLevel));
                         } else {
-                            cityMap.delete(key);
+                            deleteObjAtLevel(key, topLevel);
                         }
                     }
                 }
@@ -2554,7 +2834,8 @@
                 let occupied = false;
                 for(let i=0; i<size; i++) {
                     for(let j=0; j<size; j++) {
-                        if (cityMap.has(`${gridX+i},${gridZ+j}`)) {
+                        const checkKey = `${gridX+i},${gridZ+j}`;
+                        if (getObjAtLevel(checkKey, 0)) {
                             occupied = true;
                         }
                     }
@@ -2562,15 +2843,26 @@
 
                 // 建造或旋转逻辑
                 if (occupied) {
-                    const clickedObj = cityMap.get(`${rawGridX},${rawGridZ}`);
-                    const mainObj = clickedObj.mainKey ? cityMap.get(clickedObj.mainKey) : clickedObj;
+                    const clickedObj = getObjAtLevel(`${rawGridX},${rawGridZ}`, 0);
+                    if (!clickedObj) return;
+                    const mainObj = clickedObj.mainKey ? getObjAtLevel(clickedObj.mainKey, 0) : clickedObj;
 
                     // 水面上建桥逻辑：当前工具是直路且点击的是水面
                     if (mainObj.type === 'water' && currentTool === 'road') {
+                        // 移除原来的水面
                         objectsGroup.remove(mainObj.mesh);
-                        let newMesh = createBridge(rawGridX, rawGridZ);
+                        deleteObjAtLevel(`${rawGridX},${rawGridZ}`, 0);
+                        
+                        // 建立第一层桥梁 (level = 1)
+                        let newMesh = createBridge(rawGridX, rawGridZ, 1);
                         objectsGroup.add(newMesh);
-                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: 'bridge', mesh: newMesh });
+                        setObjAtLevel(`${rawGridX},${rawGridZ}`, 1, { type: 'bridge', mesh: newMesh });
+                        
+                        // 补回底层的纯水面
+                        let baseWater = createWater(rawGridX, rawGridZ);
+                        objectsGroup.add(baseWater);
+                        setObjAtLevel(`${rawGridX},${rawGridZ}`, 0, { type: 'water', mesh: baseWater });
+                        
                         return;
                     }
 
@@ -2590,7 +2882,7 @@
                         // 保持原有的颜色和高度，仅更换形状
                         let newMesh = createCommercial(mainObj.mesh.position.x, mainObj.mesh.position.z, nextStyle, mainObj.mesh.userData.color, mainObj.mesh.userData.height);
                         objectsGroup.add(newMesh);
-                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: currentTool, mesh: newMesh });
+                        setObjAtLevel(`${rawGridX},${rawGridZ}`, 0, { type: currentTool, mesh: newMesh });
                         
                         // 简单的弹出动画效果
                         newMesh.scale.set(0.8, 0.8, 0.8);
@@ -2622,7 +2914,7 @@
                         newMesh.userData.orientation = mainObj.mesh.userData.orientation;
                         
                         objectsGroup.add(newMesh);
-                        cityMap.set(`${rawGridX},${rawGridZ}`, { type: currentTool, mesh: newMesh });
+                        setObjAtLevel(`${rawGridX},${rawGridZ}`, 0, { type: currentTool, mesh: newMesh });
                     }
                     return; // 如果被占用，无论是否发生旋转/替换，都不再执行后续建造
                 } else {
@@ -2667,9 +2959,9 @@
                                 const k = `${gridX+i},${gridZ+j}`;
                                 occupiedKeys.push(k);
                                 if (i === 0 && j === 0) {
-                                    cityMap.set(k, { type: currentTool, mesh: newMesh });
+                                    setObjAtLevel(k, 0, { type: currentTool, mesh: newMesh });
                                 } else {
-                                    cityMap.set(k, { type: currentTool, mesh: newMesh, mainKey: key });
+                                    setObjAtLevel(k, 0, { type: currentTool, mesh: newMesh, mainKey: key });
                                 }
                             }
                         }
@@ -2815,21 +3107,26 @@
         // 获取当前城市的序列化数据
         function getCityData() {
             const dataToSave = [];
-            cityMap.forEach((obj, key) => {
-                // 只保存主节点的数据
-                if (obj.mainKey) return;
+            cityMap.forEach((arr, key) => {
+                arr.forEach(obj => {
+                    // 只保存主节点的数据
+                    if (obj.mainKey) return;
 
-                const item = {
-                    key: key,
-                    type: obj.type,
-                    x: obj.mesh.position.x - (obj.mesh.userData.size ? 0.5 : 0), // 修正多格建筑的坐标保存
-                    z: obj.mesh.position.z - (obj.mesh.userData.size ? 0.5 : 0),
-                    orientation: obj.mesh.userData.orientation !== undefined ? obj.mesh.userData.orientation : 0,
-                    style: obj.mesh.userData.style,
-                    color: obj.mesh.userData.color,
-                    height: obj.mesh.userData.height
-                };
-                dataToSave.push(item);
+                    const item = {
+                        key: key,
+                        level: obj.level, // 新增 level 字段
+                        type: obj.type,
+                        x: obj.mesh.position.x - (obj.mesh.userData.size ? 0.5 : 0),
+                        z: obj.mesh.position.z - (obj.mesh.userData.size ? 0.5 : 0),
+                        orientation: obj.mesh.userData.orientation !== undefined ? obj.mesh.userData.orientation : 0,
+                        style: obj.mesh.userData.style,
+                        color: obj.mesh.userData.color,
+                        height: obj.mesh.userData.height,
+                        levelStart: obj.mesh.userData.levelStart,
+                        levelEnd: obj.mesh.userData.levelEnd
+                    };
+                    dataToSave.push(item);
+                });
             });
             return {
                 gridSize: gridSize,
@@ -2851,8 +3148,10 @@
             }
 
             // 2. 清空当前城市
-            cityMap.forEach((obj, key) => {
-                if (obj.mesh) objectsGroup.remove(obj.mesh);
+            cityMap.forEach((arr, key) => {
+                arr.forEach(obj => {
+                    if (obj.mesh) objectsGroup.remove(obj.mesh);
+                });
             });
             cityMap.clear();
             
@@ -2866,6 +3165,9 @@
             // 3. 重建城市
             buildingsData.forEach(item => {
                 let newMesh;
+                // 兼容旧存档中没有 level 字段的数据，默认放到 level 0，如果是 bridge 放到 level 1
+                const itemLevel = item.level !== undefined ? item.level : (item.type === 'bridge' ? 1 : 0);
+
                 switch (item.type) {
                     case 'residential': 
                         newMesh = createResidential(item.x, item.z, item.style); 
@@ -2908,10 +3210,16 @@
                         newMesh = createWater(item.x, item.z); 
                         break;
                     case 'bridge':
-                        newMesh = createBridge(item.x, item.z);
+                        newMesh = createBridge(item.x, item.z, itemLevel);
                         if (item.orientation) {
                             newMesh.rotation.y = item.orientation * (Math.PI / 2);
                             newMesh.userData.orientation = item.orientation;
+                        }
+                        break;
+                    case 'ramp':
+                        newMesh = createRamp(item.x, item.z, item.levelStart || 0, item.levelEnd || 1, item.orientation || 0);
+                        if (item.orientation) {
+                            newMesh.rotation.y = item.orientation * (Math.PI / 2);
                         }
                         break;
                     case 'flower':
@@ -2971,9 +3279,9 @@
                             const k = `${item.x+i},${item.z+j}`;
                             occupiedKeys.push(k);
                             if (i === 0 && j === 0) {
-                                cityMap.set(k, { type: item.type, mesh: newMesh });
+                                setObjAtLevel(k, itemLevel, { type: item.type, mesh: newMesh });
                             } else {
-                                cityMap.set(k, { type: item.type, mesh: newMesh, mainKey: item.key });
+                                setObjAtLevel(k, itemLevel, { type: item.type, mesh: newMesh, mainKey: item.key });
                             }
                         }
                     }
@@ -3021,7 +3329,45 @@
             }
         });
 
-        // --- 导出与导入文件功能 ---
+        // 添加提升/降低高度的 UI 事件
+        let elevationMode = null; // 'up', 'down', 或 null
+        document.getElementById('elevate-btn').addEventListener('click', (e) => {
+            if (elevationMode === 'up') {
+                elevationMode = null;
+                e.currentTarget.classList.remove('ring-2', 'ring-purple-500');
+            } else {
+                elevationMode = 'up';
+                currentTool = 'pointer'; // 自动切换到指针工具
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50'));
+                document.querySelector('[data-tool="pointer"]').classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+                
+                e.currentTarget.classList.add('ring-2', 'ring-purple-500');
+                document.getElementById('lower-btn').classList.remove('ring-2', 'ring-orange-500');
+            }
+        });
+        document.getElementById('lower-btn').addEventListener('click', (e) => {
+            if (elevationMode === 'down') {
+                elevationMode = null;
+                e.currentTarget.classList.remove('ring-2', 'ring-orange-500');
+            } else {
+                elevationMode = 'down';
+                currentTool = 'pointer'; // 自动切换到指针工具
+                document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-50'));
+                document.querySelector('[data-tool="pointer"]').classList.add('ring-2', 'ring-blue-500', 'bg-blue-50');
+
+                e.currentTarget.classList.add('ring-2', 'ring-orange-500');
+                document.getElementById('elevate-btn').classList.remove('ring-2', 'ring-purple-500');
+            }
+        });
+
+        // 每次切换基础工具时，取消高度模式
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                elevationMode = null;
+                document.getElementById('elevate-btn').classList.remove('ring-2', 'ring-purple-500');
+                document.getElementById('lower-btn').classList.remove('ring-2', 'ring-orange-500');
+            });
+        });
         exportBtn.addEventListener('click', () => {
             try {
                 const data = getCityData();
@@ -3095,21 +3441,23 @@
             let landmarkCount = 0;
 
             // 统计各类型数量
-            cityMap.forEach((obj) => {
-                if (obj.mainKey) return; // 避免重复统计多格建筑
+            cityMap.forEach((arr) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return; // 避免重复统计多格建筑
 
-                if (obj.type === 'residential') residentialCount++;
-                else if (obj.type === 'commercial') commercialCount++;
-                else if (obj.type === 'tree') treeCount++;
-                else if (obj.type === 'road' || obj.type === 'road_curve' || obj.type === 'road_cross' || obj.type === 'road_t') roadCount++;
-                else if (obj.type === 'water') waterCount++;
-                else if (obj.type === 'flower') flowerCount++;
-                else if (obj.type === 'hospital') hospitalCount++;
-                else if (obj.type === 'school') schoolCount++;
-                else if (obj.type === 'fire_station') fireStationCount++;
-                else if (obj.type === 'police_station') policeStationCount++;
-                else if (obj.type === 'amusement_park') amusementParkCount++;
-                else if (obj.type === 'oriental_pearl') landmarkCount++;
+                    if (obj.type === 'residential') residentialCount++;
+                    else if (obj.type === 'commercial') commercialCount++;
+                    else if (obj.type === 'tree') treeCount++;
+                    else if (obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp') roadCount++;
+                    else if (obj.type === 'water') waterCount++;
+                    else if (obj.type === 'flower') flowerCount++;
+                    else if (obj.type === 'hospital') hospitalCount++;
+                    else if (obj.type === 'school') schoolCount++;
+                    else if (obj.type === 'fire_station') fireStationCount++;
+                    else if (obj.type === 'police_station') policeStationCount++;
+                    else if (obj.type === 'amusement_park') amusementParkCount++;
+                    else if (obj.type === 'oriental_pearl') landmarkCount++;
+                });
             });
 
             const totalObjects = residentialCount + commercialCount + treeCount + roadCount + waterCount + flowerCount + hospitalCount + schoolCount + fireStationCount + policeStationCount + amusementParkCount + landmarkCount;
@@ -3188,47 +3536,52 @@
                 let buildingNearWater = 0;
                 let buildingNearGreen = 0;
 
-                cityMap.forEach((obj, key) => {
-                    if (obj.mainKey) return; // 避免重复统计多格建筑
-                    
-                    if (['residential', 'commercial', 'hospital', 'school', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(obj.type)) {
-                        totalBuildings++;
-                        const [baseX, baseZ] = key.split(',').map(Number);
-                        const size = obj.mesh.userData.size || 1;
+                cityMap.forEach((arr, key) => {
+                    arr.forEach((obj) => {
+                        if (obj.mainKey) return; // 避免重复统计多格建筑
                         
-                        let hasRoad = false;
-                        let hasWater = false;
-                        let hasGreen = false;
+                        if (['residential', 'commercial', 'hospital', 'school', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(obj.type)) {
+                            totalBuildings++;
+                            const [baseX, baseZ] = key.split(',').map(Number);
+                            const size = obj.mesh.userData.size || 1;
+                            
+                            let hasRoad = false;
+                            let hasWater = false;
+                            let hasGreen = false;
 
-                        // 检查多格建筑的所有边缘四周
-                        for(let i=0; i<size; i++) {
-                            for(let j=0; j<size; j++) {
-                                const x = baseX + i;
-                                const z = baseZ + j;
-                                
-                                const neighbors = [
-                                    `${x+1},${z}`, `${x-1},${z}`, 
-                                    `${x},${z+1}`, `${x},${z-1}`
-                                ];
+                            // 检查多格建筑的所有边缘四周
+                            for(let i=0; i<size; i++) {
+                                for(let j=0; j<size; j++) {
+                                    const x = baseX + i;
+                                    const z = baseZ + j;
+                                    
+                                    const neighbors = [
+                                        `${x+1},${z}`, `${x-1},${z}`, 
+                                        `${x},${z+1}`, `${x},${z-1}`
+                                    ];
 
-                                neighbors.forEach(nKey => {
-                                    // 排除自身占用的格子
-                                    if (obj.mesh.userData.occupiedKeys && obj.mesh.userData.occupiedKeys.includes(nKey)) return;
+                                    neighbors.forEach(nKey => {
+                                        // 排除自身占用的格子
+                                        if (obj.mesh.userData.occupiedKeys && obj.mesh.userData.occupiedKeys.includes(nKey)) return;
 
-                                    if (cityMap.has(nKey)) {
-                                        const nType = cityMap.get(nKey).type;
-                                        if (nType.startsWith('road')) hasRoad = true;
-                                        if (nType === 'water') hasWater = true;
-                                        if (nType === 'tree' || nType === 'flower') hasGreen = true;
-                                    }
-                                });
+                                        if (cityMap.has(nKey)) {
+                                            const cellObjs = cityMap.get(nKey);
+                                            cellObjs.forEach(nObj => {
+                                                const nType = nObj.type;
+                                                if (nType.startsWith('road') || nType === 'bridge' || nType === 'ramp') hasRoad = true;
+                                                if (nType === 'water') hasWater = true;
+                                                if (nType === 'tree' || nType === 'flower') hasGreen = true;
+                                            });
+                                        }
+                                    });
+                                }
                             }
-                        }
 
-                        if (!hasRoad) isolatedBuildings++;
-                        if (hasWater) buildingNearWater++;
-                        if (hasGreen) buildingNearGreen++;
-                    }
+                            if (!hasRoad) isolatedBuildings++;
+                            if (hasWater) buildingNearWater++;
+                            if (hasGreen) buildingNearGreen++;
+                        }
+                    });
                 });
 
                 if (totalBuildings > 0) {
@@ -3263,15 +3616,17 @@
             let basePopulation = 0;
             let jobs = 0;
             
-            cityMap.forEach((obj) => {
-                if (obj.mainKey) return;
-                const sizeMultiplier = obj.mesh.userData.size === 2 ? 4 : 1;
-                
-                if (obj.type === 'residential') {
-                    basePopulation += 100 * sizeMultiplier;
-                } else if (obj.type === 'commercial') {
-                    jobs += 150 * sizeMultiplier;
-                }
+            cityMap.forEach((arr) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return;
+                    const sizeMultiplier = obj.mesh.userData.size === 2 ? 4 : 1;
+                    
+                    if (obj.type === 'residential') {
+                        basePopulation += 100 * sizeMultiplier;
+                    } else if (obj.type === 'commercial') {
+                        jobs += 150 * sizeMultiplier;
+                    }
+                });
             });
 
             // 吸引力系数 (基于城市评分，50分为基准，每多1分增加1%吸引力，最多1.5倍)
@@ -3374,7 +3729,7 @@
             centerPositions.forEach(pos => {
                 const mesh = createRoad(pos.x, pos.z);
                 objectsGroup.add(mesh);
-                cityMap.set(`${pos.x},${pos.z}`, { type: 'road', mesh: mesh });
+                setObjAtLevel(`${pos.x},${pos.z}`, 0, { type: 'road', mesh: mesh });
             });
         };
 
