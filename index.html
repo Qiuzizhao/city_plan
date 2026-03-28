@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 城市规划演示应用</title>
+    <title>迷你城市规划师</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 引入 Three.js (优先使用 jsDelivr, 失败则回退) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/three@0.128.0/build/three.min.js';"></script>
@@ -1787,6 +1787,68 @@
             return car;
         }
 
+        // 生成公交车模型
+        function createBus() {
+            const bus = new THREE.Group();
+            
+            // 公交车颜色 (经典绿色或蓝色)
+            const busColors = [0x10b981, 0x0284c7, 0xf59e0b];
+            const color = busColors[Math.floor(Math.random() * busColors.length)];
+            
+            // 公交车车身 (更长、更高)
+            const bodyGeo = new THREE.BoxGeometry(0.6, 0.25, 0.18);
+            const bodyMat = new THREE.MeshLambertMaterial({ 
+                color: color, 
+                transparent: true, 
+                opacity: 1,
+                emissive: new THREE.Color(color),
+                emissiveIntensity: isNight ? 0.2 : 0 
+            });
+            bodyMat.userData = { isCarBody: true };
+            windowMaterials.push(bodyMat);
+            
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.15;
+            body.castShadow = true;
+            bus.add(body);
+
+            // 公交车车窗 (侧面长条)
+            const windowGeo = new THREE.BoxGeometry(0.5, 0.1, 0.19);
+            const windowMat = new THREE.MeshLambertMaterial({ 
+                color: 0x93c5fd, // 浅蓝色玻璃
+                transparent: true, 
+                opacity: 0.7,
+                emissive: new THREE.Color(0xfef08a), // 夜晚透出温暖的黄光
+                emissiveIntensity: isNight ? 0.8 : 0
+            });
+            windowMat.userData = { isWindow: true }; // 借用建筑窗户的夜景逻辑
+            windowMaterials.push(windowMat);
+
+            const windows = new THREE.Mesh(windowGeo, windowMat);
+            windows.position.set(0, 0.18, 0);
+            bus.add(windows);
+            
+            // 前车灯
+            const lightGeo = new THREE.BoxGeometry(0.02, 0.04, 0.04);
+            const lightMat = new THREE.MeshBasicMaterial({ 
+                color: 0xffffee,
+                transparent: true,
+                opacity: isNight ? 1 : 0
+            });
+            windowMaterials.push(lightMat);
+            lightMat.userData = { isCarLight: true };
+            
+            const lightL = new THREE.Mesh(lightGeo, lightMat);
+            lightL.position.set(0.3, 0.1, 0.06);
+            bus.add(lightL);
+            
+            const lightR = new THREE.Mesh(lightGeo, lightMat);
+            lightR.position.set(0.3, 0.1, -0.06);
+            bus.add(lightR);
+
+            return bus;
+        }
+
         // 生成并添加一辆新车
         function spawnCar() {
             // 找到所有道路
@@ -1804,7 +1866,10 @@
             const startKey = roadKeys[Math.floor(Math.random() * roadKeys.length)];
             const [startX, startZ] = startKey.split(',').map(Number);
 
-            const carMesh = createCar();
+            // 20%的概率生成公交车，80%生成小汽车
+            const isBus = Math.random() < 0.2;
+            const carMesh = isBus ? createBus() : createCar();
+            
             carMesh.position.set(startX, 0, startZ);
             carsGroup.add(carMesh);
 
@@ -1816,11 +1881,14 @@
             else if (dir === 2) { velocity.set(0, 0, 1); carMesh.rotation.y = -Math.PI / 2; }
             else { velocity.set(0, 0, -1); carMesh.rotation.y = Math.PI / 2; }
 
+            // 公交车速度稍微慢一点
+            const baseSpeed = isBus ? 0.015 : 0.02;
+
             activeCars.push({
                 mesh: carMesh,
                 velocity: velocity,
-                speed: 0.02 + Math.random() * 0.02, // 随机速度
-                lifespan: 1000 + Math.random() * 1000 // 赋予随机寿命帧数 (约15-30秒)
+                speed: baseSpeed + Math.random() * 0.01, // 随机速度
+                lifespan: 3000 + Math.random() * 3000 // 赋予随机寿命帧数 (延长消失时间)
             });
         }
 
@@ -1883,50 +1951,53 @@
 
                     if (roadType === 'curve') {
                         // 弯道逻辑：根据进入方向强制指定出方向和最终朝向角度
-                        // 摒弃相对转角(turnAngle)，直接使用绝对目标方向，避免坐标系正负号导致混乱
                         let targetVX = vX;
                         let targetVZ = vZ;
                         let targetRotY = car.mesh.rotation.y;
                         let hasTurned = false;
                         
+                        // 为了防止小车在弯道处由于速度方向和弯道期望方向不符导致冲出，
+                        // 我们需要严格检查小车的来向。如果来向不属于弯道的两个连接口之一，
+                        // 强制让它掉头。
+                        
                         // orientation 0: 左下连接 (连接左边 x=-1 和 下边 z=1)
                         if (orientation === 0) {
-                            if (vX === 1) { // 从左边来，往右开 -> 转为往下开 (z=1)
+                            if (vX === 1 && vZ === 0) { // 从左边来(速度为+x)，往右开 -> 转为往下开 (z=1)
                                 targetVX = 0; targetVZ = 1; targetRotY = -Math.PI / 2; hasTurned = true;
-                            } else if (vZ === -1) { // 从下边来，往上开 -> 转为往左开 (x=-1)
+                            } else if (vZ === -1 && vX === 0) { // 从下边来(速度为-z)，往上开 -> 转为往左开 (x=-1)
                                 targetVX = -1; targetVZ = 0; targetRotY = Math.PI; hasTurned = true;
-                            } else { // 开错方向，掉头
-                                targetVX = -vX; targetVZ = -vZ; targetRotY += Math.PI; hasTurned = true;
+                            } else { // 开错方向，直接保持直行穿过，避免掉头后陷入死循环
+                                hasTurned = true;
                             }
                         } 
                         // orientation 1: 右下连接 (连接右边 x=1 和 下边 z=1)
                         else if (orientation === 1) {
-                            if (vX === -1) { // 从右边来，往左开 -> 转为往下开 (z=1)
+                            if (vX === -1 && vZ === 0) { // 从右边来，往左开 -> 转为往下开 (z=1)
                                 targetVX = 0; targetVZ = 1; targetRotY = -Math.PI / 2; hasTurned = true;
-                            } else if (vZ === -1) { // 从下边来，往上开 -> 转为往右开 (x=1)
+                            } else if (vZ === -1 && vX === 0) { // 从下边来，往上开 -> 转为往右开 (x=1)
                                 targetVX = 1; targetVZ = 0; targetRotY = 0; hasTurned = true;
                             } else {
-                                targetVX = -vX; targetVZ = -vZ; targetRotY += Math.PI; hasTurned = true;
+                                hasTurned = true;
                             }
                         } 
                         // orientation 2: 右上连接 (连接右边 x=1 和 上边 z=-1)
                         else if (orientation === 2) {
-                            if (vX === -1) { // 从右边来，往左开 -> 转为往上开 (z=-1)
+                            if (vX === -1 && vZ === 0) { // 从右边来，往左开 -> 转为往上开 (z=-1)
                                 targetVX = 0; targetVZ = -1; targetRotY = Math.PI / 2; hasTurned = true;
-                            } else if (vZ === 1) { // 从上边来，往下开 -> 转为往右开 (x=1)
+                            } else if (vZ === 1 && vX === 0) { // 从上边来，往下开 -> 转为往右开 (x=1)
                                 targetVX = 1; targetVZ = 0; targetRotY = 0; hasTurned = true;
                             } else {
-                                targetVX = -vX; targetVZ = -vZ; targetRotY += Math.PI; hasTurned = true;
+                                hasTurned = true;
                             }
                         } 
                         // orientation 3: 左上连接 (连接左边 x=-1 和 上边 z=-1)
                         else if (orientation === 3) {
-                            if (vX === 1) { // 从左边来，往右开 -> 转为往上开 (z=-1)
+                            if (vX === 1 && vZ === 0) { // 从左边来，往右开 -> 转为往上开 (z=-1)
                                 targetVX = 0; targetVZ = -1; targetRotY = Math.PI / 2; hasTurned = true;
-                            } else if (vZ === 1) { // 从上边来，往下开 -> 转为往左开 (x=-1)
+                            } else if (vZ === 1 && vX === 0) { // 从上边来，往下开 -> 转为往左开 (x=-1)
                                 targetVX = -1; targetVZ = 0; targetRotY = Math.PI; hasTurned = true;
                             } else {
-                                targetVX = -vX; targetVZ = -vZ; targetRotY += Math.PI; hasTurned = true;
+                                hasTurned = true;
                             }
                         }
 
@@ -1963,16 +2034,16 @@
                     } else if (roadType === 't_junction') {
                         // T型路口逻辑：
                         // orientation 0: 上方平直(连接 -x, +x)，下方分支(连接 +z)
-                        // orientation 1: 右侧平直(连接 -z, +z)，左方分支(连接 -x)
+                        // orientation 1: 左侧平直(连接 -z, +z)，右方分支(连接 +x)
                         // orientation 2: 下方平直(连接 -x, +x)，上方分支(连接 -z)
-                        // orientation 3: 左侧平直(连接 -z, +z)，右方分支(连接 +x)
+                        // orientation 3: 右侧平直(连接 -z, +z)，左方分支(连接 -x)
                         
                         // 简单处理：先找出该 T 型路口允许通行的 3 个方向
                         let allowedDirs = []; // 存储允许驶出的速度向量 [x, z]
                         if (orientation === 0) allowedDirs = [[-1, 0], [1, 0], [0, 1]];
-                        else if (orientation === 1) allowedDirs = [[0, -1], [0, 1], [-1, 0]];
+                        else if (orientation === 1) allowedDirs = [[0, -1], [0, 1], [1, 0]];
                         else if (orientation === 2) allowedDirs = [[-1, 0], [1, 0], [0, -1]];
-                        else if (orientation === 3) allowedDirs = [[0, -1], [0, 1], [1, 0]];
+                        else if (orientation === 3) allowedDirs = [[0, -1], [0, 1], [-1, 0]];
                         
                         // 从允许的方向中，去掉当前的来向(即不能掉头)
                         const incomingDir = [-vX, -vZ]; // 比如往右开 [1,0]，来向就是 [-1,0]
@@ -2012,14 +2083,21 @@
                     car.hasTurnedInCurrentGrid = false;
                 }
 
-                // 如果开出边界或开出道路，则销毁车辆
+                // 如果开出边界或开出道路，则销毁车辆或掉头
                 const limit = gridSize / 2;
-                if (!currentRoad || 
-                    car.mesh.position.x < -limit || car.mesh.position.x > limit || 
-                    car.mesh.position.z < -limit || car.mesh.position.z > limit) {
-                    
+                let isOutOfBounds = car.mesh.position.x < -limit || car.mesh.position.x > limit || 
+                                    car.mesh.position.z < -limit || car.mesh.position.z > limit;
+                
+                if (isOutOfBounds) {
                     carsGroup.remove(car.mesh);
                     activeCars.splice(i, 1);
+                } else if (!currentRoad) {
+                    // 如果在网格内但开出了道路(比如断头路)，则让小车掉头
+                    car.velocity.set(-car.velocity.x, 0, -car.velocity.z);
+                    car.mesh.rotation.y += Math.PI;
+                    
+                    // 为了防止在道路边缘反复触发掉头，需要把车往回推一点点
+                    car.mesh.position.addScaledVector(car.velocity, car.speed * 2);
                 }
             }
         }
