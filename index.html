@@ -55,104 +55,357 @@
     <!-- UI 层 -->
     <div class="absolute top-0 left-0 w-full h-full pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6">
         
-        <!-- 顶部标题面板 -->
-        <div class="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-lg pointer-events-auto border border-gray-100 self-start max-w-sm w-full">
-            <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-4 4h1m-1 4h1" />
-                </svg>
-                迷你城市规划师
-            </h1>
-            <!-- 桌面端提示 -->
-            <p class="text-xs text-gray-500 leading-relaxed hidden md:block">
-                <span class="font-semibold text-gray-700">操作指南：</span><br/>
-                左键：点击放置 / 拖动旋转视角<br/>
-                右键：拖动平移视角<br/>
-                滚轮：缩放视角
-            </p>
-            <!-- 移动端提示 -->
-            <p class="text-xs text-gray-500 leading-relaxed md:hidden">
-                <span class="font-semibold text-gray-700">操作指南：</span><br/>
-                单指点击：放置 / 切换样式<br/>
-                单指滑动：旋转视角<br/>
-                双指滑动：缩放 / 平移视角
-            </p>
+        <!-- 左侧指挥中心 & 数据看板 -->
+        <div id="sidebar-dashboard" class="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl pointer-events-auto border border-gray-100 flex flex-col transition-all duration-300 w-[350px] max-h-[82vh] overflow-hidden self-start mt-2">
+            
+            <!-- 头部 Title & 折叠按钮 -->
+            <div class="p-3 border-b border-gray-100 flex justify-between items-center bg-indigo-50/50">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🏙️</span>
+                    <div>
+                        <h1 class="text-sm font-bold text-gray-800">市政指挥中心</h1>
+                        <p class="text-[10px] text-gray-500 font-medium flex items-center gap-1" id="simulation-mode-indicator">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> 仿真挑战模式
+                        </p>
+                    </div>
+                </div>
+                <div class="flex gap-1">
+                    <button id="toggle-sandbox-btn" class="text-[10px] bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold px-2 py-0.5 rounded transition-colors" title="切换沙盒/挑战模式">
+                        ⚙️ 模式
+                    </button>
+                    <button id="collapse-dashboard-btn" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg text-xs font-bold" title="折叠看板">
+                        ◀ 收起
+                    </button>
+                </div>
+            </div>
+
+            <!-- 折叠后显示的迷你面板 (默认隐藏) -->
+            <div id="mini-hud" class="hidden p-2 flex justify-around items-center bg-white/90 backdrop-blur-md border border-gray-100 text-xs font-bold text-gray-700 shadow-md">
+                <span id="mini-funds" class="text-green-600">💵 $100K</span>
+                <span id="mini-pop">👥 0</span>
+                <span id="mini-happy">😊 80%</span>
+                <button id="expand-dashboard-btn" class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded font-bold transition-colors">
+                    展开 ▶
+                </button>
+            </div>
+
+            <!-- 展开后的完整面板内容 -->
+            <div id="full-dashboard" class="flex-1 flex flex-col overflow-hidden">
+                
+                <!-- 快捷基本指标 (资金, 人口, 满意度) -->
+                <div class="grid grid-cols-3 divide-x divide-gray-100 border-b border-gray-100 bg-gray-50/50 text-center py-2">
+                    <div>
+                        <div class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">城市资金</div>
+                        <div id="hud-funds" class="text-xs font-bold text-green-600">$100,000</div>
+                        <div id="hud-funds-flow" class="text-[8px] text-green-500 font-bold">+0/分</div>
+                    </div>
+                    <div>
+                        <div class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">市民人口</div>
+                        <div id="hud-population" class="text-xs font-bold text-gray-800">0 人</div>
+                        <div id="hud-pop-flow" class="text-[8px] text-gray-400 font-bold">稳定</div>
+                    </div>
+                    <div>
+                        <div class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">幸福度</div>
+                        <div id="hud-happiness" class="text-xs font-bold text-yellow-500">80%</div>
+                        <div id="hud-happy-emoji" class="text-[8px] text-yellow-600 font-bold">🙂 良好</div>
+                    </div>
+                </div>
+
+                <!-- 选项卡按钮 -->
+                <div class="flex border-b border-gray-100 bg-gray-50/30 text-xs font-bold text-gray-500">
+                    <button class="flex-1 py-1.5 text-center border-b-2 border-indigo-500 text-indigo-600 transition-colors" id="tab-overview-btn">📈 综合</button>
+                    <button class="flex-1 py-1.5 text-center border-b-2 border-transparent hover:text-gray-700 transition-colors" id="tab-utilities-btn">⚡ 市政</button>
+                    <button class="flex-1 py-1.5 text-center border-b-2 border-transparent hover:text-gray-700 transition-colors" id="tab-advisory-btn">📋 规划建议</button>
+                </div>
+
+                <!-- 滚动面板内容 -->
+                <div class="flex-1 overflow-y-auto p-3 space-y-3 text-xs text-gray-600" id="dashboard-tab-content" style="scrollbar-width: none;">
+                    
+                    <!-- TAB 1: 综合概览 -->
+                    <div id="tab-overview" class="space-y-3">
+                        
+                        <!-- 动态折线趋势图 (Sparkline) -->
+                        <div class="bg-gray-50 p-2 rounded-xl border border-gray-100">
+                            <div class="text-[10px] font-bold text-gray-500 mb-1 flex justify-between">
+                                <span>📈 城市发展趋势</span>
+                                <span class="text-[9px] text-gray-400 font-normal">最近 3 分钟 (蓝:人口 黄:幸福 绿:资金)</span>
+                            </div>
+                            <canvas id="trend-sparkline" width="310" height="90" class="w-full h-[90px] block rounded bg-white"></canvas>
+                        </div>
+
+                        <!-- 税率控制滑块 -->
+                        <div class="space-y-2 bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100/30">
+                            <div class="text-[10px] font-bold text-indigo-800 flex justify-between">
+                                <span>⚖️ 税务政策调整</span>
+                                <span class="text-[9px] text-indigo-600 font-normal">影响吸引力与财政税收</span>
+                            </div>
+                            <div class="space-y-1.5">
+                                <div>
+                                    <div class="flex justify-between text-[10px] text-gray-600 font-semibold mb-0.5">
+                                        <span>🏠 居民个人税</span>
+                                        <span id="tax-res-val" class="font-bold text-indigo-600">10%</span>
+                                    </div>
+                                    <input type="range" id="tax-res-slider" min="0" max="25" value="10" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[10px] text-gray-600 font-semibold mb-0.5">
+                                        <span>🏢 商业增值税</span>
+                                        <span id="tax-com-val" class="font-bold text-indigo-600">10%</span>
+                                    </div>
+                                    <input type="range" id="tax-com-slider" min="0" max="25" value="10" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 财务报告 -->
+                        <div class="space-y-1 p-2 bg-gray-50/50 rounded-xl border border-gray-100">
+                            <h3 class="font-bold text-gray-700 text-[10px] border-b border-gray-200 pb-0.5 mb-1">💰 财政收支明细 (每分钟)</h3>
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                                <div class="text-gray-400">居民税收:</div>
+                                <div class="text-right text-green-600 font-medium" id="muni-tax-res">+$0</div>
+                                <div class="text-gray-400">商业税收:</div>
+                                <div class="text-right text-green-600 font-medium" id="muni-tax-com">+$0</div>
+                                <div class="text-gray-400 border-t border-gray-100 pt-0.5 font-bold">总财政收入:</div>
+                                <div class="text-right text-green-600 font-bold border-t border-gray-100 pt-0.5" id="muni-income-total">+$0</div>
+                                
+                                <div class="text-gray-400 mt-0.5">市政维护开支:</div>
+                                <div class="text-right text-red-500 font-medium mt-0.5" id="muni-maint-total">-$0</div>
+                                
+                                <div class="text-gray-700 font-bold border-t border-gray-200 pt-1 mt-0.5">净盈余/赤字:</div>
+                                <div class="text-right font-black border-t border-gray-200 pt-1 mt-0.5" id="muni-net-flow">+$0</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: 市政与网格 -->
+                    <div id="tab-utilities" class="space-y-3 hidden">
+                        <!-- 电力网格 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                                <span class="flex items-center gap-1">⚡ 城市电网 (kW)</span>
+                                <span id="muni-power-status" class="text-green-600">供应充足</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-2">
+                                <div id="muni-power-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-gray-400 font-medium">
+                                <span>需求: <span id="muni-power-demand" class="text-gray-600 font-semibold">0</span></span>
+                                <span>容量: <span id="muni-power-capacity" class="text-gray-600 font-semibold">150</span></span>
+                            </div>
+                        </div>
+
+                        <!-- 水网格 -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                                <span class="flex items-center gap-1">🚰 供水网格 (m³)</span>
+                                <span id="muni-water-status" class="text-green-600">供应充足</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-2">
+                                <div id="muni-water-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-gray-400 font-medium">
+                                <span>需求: <span id="muni-water-demand" class="text-gray-600 font-semibold">0</span></span>
+                                <span>容量: <span id="muni-water-capacity" class="text-gray-600 font-semibold">150</span></span>
+                            </div>
+                        </div>
+
+                        <!-- 生态与碳指数 -->
+                        <div class="space-y-1 border-t border-gray-100 pt-2">
+                            <div class="flex justify-between text-[10px] font-bold text-gray-700">
+                                <span class="flex items-center gap-1">🌿 绿色生态与碳指数</span>
+                                <span id="muni-eco-text" class="text-green-600">良好</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded-full h-2">
+                                <div id="muni-eco-bar" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 100%"></div>
+                            </div>
+                            <div class="flex justify-between text-[9px] text-gray-400 font-medium">
+                                <span>绿化质量: <span id="muni-eco-val" class="text-gray-600 font-semibold">0/100</span></span>
+                                <span>碳排放度: <span id="muni-carbon-val" class="text-gray-600 font-semibold">极低</span></span>
+                            </div>
+                        </div>
+
+                        <!-- 公共服务覆盖率 -->
+                        <div class="space-y-1.5 border-t border-gray-100 pt-2">
+                            <h4 class="text-[10px] font-bold text-gray-700 mb-0.5">🏥 社区公共服务覆盖 (空间仿真)</h4>
+                            <div class="space-y-1 text-[10px]">
+                                <div>
+                                    <div class="flex justify-between text-gray-400 font-medium mb-0.5">
+                                        <span>👮 警防治安</span>
+                                        <span id="cov-police" class="text-gray-700 font-bold">100%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1"><div id="cov-police-bar" class="bg-green-600 h-1 rounded-full transition-all duration-500" style="width: 100%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-gray-400 font-medium mb-0.5">
+                                        <span>👨‍🚒 消防覆盖</span>
+                                        <span id="cov-fire" class="text-gray-700 font-bold">100%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1"><div id="cov-fire-bar" class="bg-green-600 h-1 rounded-full transition-all duration-500" style="width: 100%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-gray-400 font-medium mb-0.5">
+                                        <span>🏥 医疗保障</span>
+                                        <span id="cov-hospital" class="text-gray-700 font-bold">100%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1"><div id="cov-hospital-bar" class="bg-green-600 h-1 rounded-full transition-all duration-500" style="width: 100%"></div></div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-gray-400 font-medium mb-0.5">
+                                        <span>🏫 教育辐射</span>
+                                        <span id="cov-school" class="text-gray-700 font-bold">100%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-100 rounded-full h-1"><div id="cov-school-bar" class="bg-green-600 h-1 rounded-full transition-all duration-500" style="width: 100%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: 规划建议 -->
+                    <div id="tab-advisory" class="space-y-2 hidden">
+                        <div class="flex justify-between items-center bg-indigo-50 p-2 rounded-xl border border-indigo-100/30">
+                            <span class="font-bold text-indigo-900 text-[10px]">🏙️ 城市发展评级:</span>
+                            <span id="advisory-grade" class="font-black text-indigo-600 text-xs">A (良好)</span>
+                        </div>
+                        <div class="space-y-1.5">
+                            <div class="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b pb-0.5">💡 市长内阁简报与建议</div>
+                            <ul id="advisory-list" class="text-[10px] text-gray-600 space-y-1.5 list-disc pl-3.5 leading-relaxed">
+                                <li>城市运行良好，继续保持！</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 折叠内的操作指南 -->
+                    <div class="border-t border-gray-100 pt-2 mt-2">
+                        <details class="text-[10px] text-gray-400 group cursor-pointer">
+                            <summary class="font-bold text-gray-500 flex justify-between items-center">
+                                <span>❔ 模拟器操作指南</span>
+                                <span class="group-open:rotate-180 transition-transform">▼</span>
+                            </summary>
+                            <div class="mt-1 space-y-1 bg-gray-50 p-2 rounded border border-gray-100 text-gray-500 leading-normal">
+                                <p class="font-semibold text-gray-700">鼠标操作：</p>
+                                <p>• 左键点击：在网格内放置或调整建筑</p>
+                                <p>• 左键拖动：旋转摄像机视角</p>
+                                <p>• 右键拖动：平移摄像机视角</p>
+                                <p>• 鼠标滚轮：缩放画面</p>
+                                <p class="font-semibold text-gray-700 mt-1">移动端操作：</p>
+                                <p>• 单指点击：放置或旋转建筑</p>
+                                <p>• 单指滑动：旋转摄像机视角</p>
+                                <p>• 双指滑动：缩放/平移摄像机视角</p>
+                                <p class="font-semibold text-gray-700 mt-1">特色规则：</p>
+                                <p>• 点击同一格子上的同类建筑（如商业楼）可无缝切换样式。</p>
+                                <p>• 若电力短缺，夜晚建筑窗户将熄灯。</p>
+                            </div>
+                        </details>
+                    </div>
+
+                </div>
+            </div>
         </div>
 
         <!-- 底部工具栏 -->
-        <div class="bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-xl pointer-events-auto border border-gray-100 self-center flex gap-2 overflow-x-auto max-w-full">
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="pointer">
-                <span class="text-2xl mb-1">🖱️</span>
-                <span class="text-xs font-medium">选择</span>
+        <div id="bottom-toolbar" class="bg-white/90 backdrop-blur-md p-2 rounded-2xl shadow-xl pointer-events-auto border border-gray-100 self-center flex gap-2 overflow-x-auto max-w-full">
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="pointer">
+                <span class="text-2xl mb-0.5">🖱️</span>
+                <span class="text-xs font-semibold">选择</span>
+                <span class="text-[9px] text-gray-400 font-medium">免费</span>
             </button>
-            <div class="w-px bg-gray-200 mx-1 my-2"></div> <!-- 分隔线 -->
-            <button class="tool-btn active flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px]" data-tool="residential">
-                <span class="text-2xl mb-1">🏠</span>
-                <span class="text-xs font-medium">住宅</span>
+            <div class="w-px bg-gray-200 mx-0.5 my-1.5"></div> <!-- 分隔线 -->
+            <button class="tool-btn active flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px]" data-tool="residential">
+                <span class="text-2xl mb-0.5">🏠</span>
+                <span class="text-xs font-semibold">住宅</span>
+                <span class="text-[9px] text-indigo-500 font-bold">$2K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="commercial">
-                <span class="text-2xl mb-1">🏢</span>
-                <span class="text-xs font-medium">商业</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="commercial">
+                <span class="text-2xl mb-0.5">🏢</span>
+                <span class="text-xs font-semibold">商业</span>
+                <span class="text-[9px] text-indigo-500 font-bold">$4K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="tree">
-                <span class="text-2xl mb-1">🌳</span>
-                <span class="text-xs font-medium">树木</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="tree">
+                <span class="text-2xl mb-0.5">🌳</span>
+                <span class="text-xs font-semibold">树木</span>
+                <span class="text-[9px] text-green-600 font-bold">$100</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="road">
-                <span class="text-2xl mb-1">🛣️</span>
-                <span class="text-xs font-medium">直道</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="flower">
+                <span class="text-2xl mb-0.5">🌸</span>
+                <span class="text-xs font-semibold">花田</span>
+                <span class="text-[9px] text-green-600 font-bold">$150</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="road_curve">
-                <span class="text-2xl mb-1">↪️</span>
-                <span class="text-xs font-medium">弯道</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="road">
+                <span class="text-2xl mb-0.5">🛣️</span>
+                <span class="text-xs font-semibold">直道</span>
+                <span class="text-[9px] text-gray-500 font-bold">$500</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="road_cross">
-                <span class="text-2xl mb-1">🔀</span>
-                <span class="text-xs font-medium">十字路</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="road_curve">
+                <span class="text-2xl mb-0.5">↪️</span>
+                <span class="text-xs font-semibold">弯道</span>
+                <span class="text-[9px] text-gray-500 font-bold">$500</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="road_t">
-                <span class="text-2xl mb-1">┳</span>
-                <span class="text-xs font-medium">T型路</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="road_cross">
+                <span class="text-2xl mb-0.5">🔀</span>
+                <span class="text-xs font-semibold">十字路</span>
+                <span class="text-[9px] text-gray-500 font-bold">$800</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="water">
-                <span class="text-2xl mb-1">💧</span>
-                <span class="text-xs font-medium">水面</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="road_t">
+                <span class="text-2xl mb-0.5">┳</span>
+                <span class="text-xs font-semibold">T型路</span>
+                <span class="text-[9px] text-gray-500 font-bold">$600</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="flower">
-                <span class="text-2xl mb-1">🌸</span>
-                <span class="text-xs font-medium">花田</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="water">
+                <span class="text-2xl mb-0.5">💧</span>
+                <span class="text-xs font-semibold">水面</span>
+                <span class="text-[9px] text-blue-500 font-bold">$300</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="hospital">
-                <span class="text-2xl mb-1">🏥</span>
-                <span class="text-xs font-medium">医院</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="solar_station">
+                <span class="text-2xl mb-0.5">⚡</span>
+                <span class="text-xs font-semibold">太阳能</span>
+                <span class="text-[9px] text-amber-600 font-bold">$15K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="school">
-                <span class="text-2xl mb-1">🏫</span>
-                <span class="text-xs font-medium">学校</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="water_tower">
+                <span class="text-2xl mb-0.5">🚰</span>
+                <span class="text-xs font-semibold">水塔</span>
+                <span class="text-[9px] text-sky-600 font-bold">$10K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="fire_station">
-                <span class="text-2xl mb-1">🚒</span>
-                <span class="text-xs font-medium">消防局</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="hospital">
+                <span class="text-2xl mb-0.5">🏥</span>
+                <span class="text-xs font-semibold">医院</span>
+                <span class="text-[9px] text-rose-500 font-bold">$20K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="police_station">
-                <span class="text-2xl mb-1">🚓</span>
-                <span class="text-xs font-medium">警察局</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="school">
+                <span class="text-2xl mb-0.5">🏫</span>
+                <span class="text-xs font-semibold">学校</span>
+                <span class="text-[9px] text-rose-500 font-bold">$15K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="amusement_park">
-                <span class="text-2xl mb-1">🎡</span>
-                <span class="text-xs font-medium">游乐园</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="fire_station">
+                <span class="text-2xl mb-0.5">🚒</span>
+                <span class="text-xs font-semibold">消防局</span>
+                <span class="text-[9px] text-rose-500 font-bold">$12K</span>
             </button>
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-gray-600" data-tool="oriental_pearl">
-                <span class="text-2xl mb-1">🗼</span>
-                <span class="text-xs font-medium">东方明珠</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="police_station">
+                <span class="text-2xl mb-0.5">安排</span>
+                <span class="text-xs font-semibold">警察局</span>
+                <span class="text-[9px] text-rose-500 font-bold">$12K</span>
             </button>
-            <div class="w-px bg-gray-200 mx-1 my-2"></div> <!-- 分隔线 -->
-            <button class="tool-btn flex flex-col items-center justify-center p-3 rounded-xl min-w-[70px] text-red-500 hover:text-red-600 hover:bg-red-50" data-tool="demolish">
-                <span class="text-2xl mb-1">🔨</span>
-                <span class="text-xs font-medium">拆除</span>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="amusement_park">
+                <span class="text-2xl mb-0.5">🎡</span>
+                <span class="text-xs font-semibold">游乐园</span>
+                <span class="text-[9px] text-purple-500 font-bold">$25K</span>
+            </button>
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-gray-600" data-tool="oriental_pearl">
+                <span class="text-2xl mb-0.5">🗼</span>
+                <span class="text-xs font-semibold">东方明珠</span>
+                <span class="text-[9px] text-purple-500 font-bold">$60K</span>
+            </button>
+            <div class="w-px bg-gray-200 mx-0.5 my-1.5"></div> <!-- 分隔线 -->
+            <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl min-w-[70px] text-red-500 hover:text-red-600 hover:bg-red-50" data-tool="demolish">
+                <span class="text-2xl mb-0.5">🔨</span>
+                <span class="text-xs font-semibold">拆除</span>
+                <span class="text-[9px] text-red-400 font-bold">退50%</span>
             </button>
         </div>
     </div>
+
+    <!-- 实时消息 Toast 通知容器 -->
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <!-- 评估按钮 (悬浮在右上角) -->
     <div class="absolute top-4 right-4 z-20 flex flex-col gap-2">
@@ -169,6 +422,14 @@
                 </button>
                 <button id="weather-btn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1">
                     <span id="weather-icon">🌤️</span> <span id="weather-text">晴天</span>
+                </button>
+            </div>
+            <div class="flex gap-2">
+                <button id="visibility-btn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1" title="切换场景雾化能见度">
+                    <span id="visibility-icon">👁️</span> <span id="visibility-text">默认能见度</span>
+                </button>
+                <button id="clouds-btn" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-1.5 px-3 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1" title="打开/隐藏云朵">
+                    <span id="clouds-icon">☁️</span> <span id="clouds-text">显示云朵</span>
                 </button>
             </div>
         </div>
@@ -204,6 +465,20 @@
                 </button>
                 <button id="import-btn" class="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="从文件导入">
                     <span>📥</span> 导入
+                </button>
+            </div>
+            <div class="text-xs font-bold text-gray-500 text-center uppercase tracking-wider mb-1 mt-2">规划示例</div>
+            <div class="flex gap-2">
+                <button id="demo-30-btn" class="flex-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="加载30x30城市规划示例">
+                    <span>🏙️</span> 30x30
+                </button>
+                <button id="demo-60-btn" class="flex-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="加载60x60城市规划示例">
+                    <span>🏙️</span> 60x60
+                </button>
+            </div>
+            <div class="flex gap-2 mt-1">
+                <button id="screenshot-btn" class="flex-1 bg-pink-100 hover:bg-pink-200 text-pink-700 py-1.5 px-3 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1" title="截取当前视角风景并下载">
+                    <span>📸</span> 拍照
                 </button>
             </div>
             <div id="save-status" class="text-xs text-center text-gray-500 h-4"></div>
@@ -457,8 +732,88 @@
             console.log(`地图已自动扩展，当前大小: ${gridSize}x${gridSize}`);
         }
 
+        // 动态重置网格大小函数
+        function resetGridSize(targetSize = 30) {
+            gridSize = targetSize;
+            
+            // 移除旧的网格、交互平面和地面
+            scene.remove(interactPlane);
+            scene.remove(gridHelper);
+            scene.remove(ground);
+            
+            // 释放旧几何体内存
+            if (interactPlaneGeo) interactPlaneGeo.dispose();
+            if (groundGeo) groundGeo.dispose();
+            
+            // 重新创建并添加
+            interactPlaneGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+            interactPlaneGeo.rotateX(-Math.PI / 2);
+            interactPlane = new THREE.Mesh(interactPlaneGeo, new THREE.MeshBasicMaterial({ visible: false }));
+            scene.add(interactPlane);
+            
+            gridHelper = new THREE.GridHelper(gridSize, gridSize, 0x000000, 0x000000);
+            gridHelper.material.opacity = 0.1;
+            gridHelper.material.transparent = true;
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            groundGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+            groundGeo.rotateX(-Math.PI / 2);
+            ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            console.log(`地图大小已重置: ${gridSize}x${gridSize}`);
+        }
+
         // --- 4. 城市数据与构建系统 ---
         let currentTool = 'residential';
+
+        // --- 仿真挑战系统变量 ---
+        let simulationMode = 'simulation'; // 'sandbox' 或 'simulation'
+        let funds = 100000; // 初始资金 $100,000
+        let population = 0;
+        let happiness = 80;
+        let taxRateResidential = 10; // 百分比
+        let taxRateCommercial = 10; // 百分比
+        let electricityCapacity = 150; // 基础电网容量
+        let electricityDemand = 0;
+        let waterCapacity = 150; // 基础水网容量
+        let waterDemand = 0;
+        let carbonIndex = 0;
+        let totalIncome = 0;
+        let totalExpenses = 0;
+        
+        // 历史趋势数据，用于图表 (保存最近30个数据点)
+        const historyData = {
+            population: [0],
+            funds: [100000],
+            happiness: [80]
+        };
+
+        // 各建筑与设施的经济与属性配置表
+        const BUILDING_CONFIGS = {
+            residential: { name: '住宅', cost: 2000, maint: 0, power: 80, water: 80 },
+            commercial: { name: '商业', cost: 4000, maint: 0, power: 120, water: 100 },
+            tree: { name: '树木', cost: 100, maint: 5, power: 0, water: 0 },
+            flower: { name: '花田', cost: 150, maint: 8, power: 0, water: 0 },
+            road: { name: '直道', cost: 500, maint: 10, power: 0, water: 0 },
+            road_curve: { name: '弯道', cost: 500, maint: 10, power: 0, water: 0 },
+            road_cross: { name: '十字路', cost: 800, maint: 15, power: 0, water: 0 },
+            road_t: { name: 'T型路', cost: 600, maint: 12, power: 0, water: 0 },
+            water: { name: '水面', cost: 300, maint: 2, power: 0, water: 0 },
+            bridge: { name: '桥梁', cost: 1200, maint: 20, power: 0, water: 0 },
+            ramp: { name: '坡道', cost: 800, maint: 15, power: 0, water: 0 },
+            solar_station: { name: '太阳能电站', cost: 15000, maint: 200, power: -2500, water: 0 },
+            water_tower: { name: '市政水塔', cost: 10000, maint: 150, power: 50, water: -2000 },
+            hospital: { name: '医院', cost: 20000, maint: 400, power: 200, water: 150 },
+            school: { name: '学校', cost: 15000, maint: 300, power: 150, water: 120 },
+            fire_station: { name: '消防局', cost: 12000, maint: 250, power: 120, water: 100 },
+            police_station: { name: '警察局', cost: 12000, maint: 250, power: 120, water: 100 },
+            amusement_park: { name: '游乐园', cost: 25000, maint: 500, power: 250, water: 200 },
+            oriental_pearl: { name: '东方明珠', cost: 60000, maint: 1000, power: 400, water: 300 }
+        };
+
         // 数据结构升级：cityMap 支持多层高度，键名依然为 "x,z" 但值为数组
         // 形如：{ "1,2": [ { level: 0, type: 'water', mesh: ... }, { level: 1, type: 'bridge', mesh: ... } ] }
         const cityMap = new Map(); // 存储网格上的对象: "x,z" -> [{level, type, mesh}]
@@ -643,6 +998,129 @@
             const scale = 0.9 + Math.random() * 0.2;
             group.scale.set(scale, scale, scale);
             
+            return group;
+        }
+
+        // 生成太阳能电站 (Solar Power Station)
+        function createSolarStation(x, z) {
+            const group = new THREE.Group();
+            group.userData = { isBuilding: true, isUtility: true, style: 0 };
+
+            // Base
+            const baseGeo = new THREE.BoxGeometry(0.8, 0.05, 0.8);
+            const baseMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = 0.025;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            group.add(base);
+
+            // Support legs
+            const legGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.25, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+            
+            const leg1 = new THREE.Mesh(legGeo, legMat);
+            leg1.position.set(-0.2, 0.125, -0.2);
+            const leg2 = new THREE.Mesh(legGeo, legMat);
+            leg2.position.set(0.2, 0.125, -0.2);
+            const leg3 = new THREE.Mesh(legGeo, legMat);
+            leg3.position.set(-0.2, 0.225, 0.2);
+            const leg4 = new THREE.Mesh(legGeo, legMat);
+            leg4.position.set(0.2, 0.225, 0.2);
+            group.add(leg1, leg2, leg3, leg4);
+
+            // Solar Panel
+            const panelGeo = new THREE.BoxGeometry(0.7, 0.03, 0.6);
+            const panelMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1e3a8a,
+                roughness: 0.1,
+                metalness: 0.9,
+                emissive: new THREE.Color(0x3b82f6),
+                emissiveIntensity: isNight ? 0.4 : 0
+            });
+            windowMaterials.push(panelMat);
+            
+            const panel = new THREE.Mesh(panelGeo, panelMat);
+            panel.position.set(0, 0.22, 0);
+            panel.rotation.x = -Math.PI / 12;
+            panel.castShadow = true;
+            group.add(panel);
+
+            // Grid lines on panel
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa });
+            for (let i = -2; i <= 2; i++) {
+                const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.032, 0.58), lineMat);
+                vLine.position.set(i * 0.12, 0, 0);
+                panel.add(vLine);
+            }
+            const hLine = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.032, 0.005), lineMat);
+            hLine.position.set(0, 0, 0);
+            panel.add(hLine);
+
+            group.position.set(x, 0, z);
+            return group;
+        }
+
+        // 生成市政水塔 (Water Tower)
+        function createWaterTower(x, z) {
+            const group = new THREE.Group();
+            group.userData = { isBuilding: true, isUtility: true, style: 0 };
+
+            // Base
+            const baseGeo = new THREE.BoxGeometry(0.8, 0.05, 0.8);
+            const baseMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = 0.025;
+            base.castShadow = true;
+            base.receiveShadow = true;
+            group.add(base);
+
+            // Support pillars
+            const legGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.6, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+            
+            const leg1 = new THREE.Mesh(legGeo, legMat);
+            leg1.position.set(-0.2, 0.3, -0.2);
+            const leg2 = new THREE.Mesh(legGeo, legMat);
+            leg2.position.set(0.2, 0.3, -0.2);
+            const leg3 = new THREE.Mesh(legGeo, legMat);
+            leg3.position.set(-0.2, 0.3, 0.2);
+            const leg4 = new THREE.Mesh(legGeo, legMat);
+            leg4.position.set(0.2, 0.3, 0.2);
+            group.add(leg1, leg2, leg3, leg4);
+
+            // Central Pipe
+            const pipeGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.6, 8);
+            const pipeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.5 });
+            const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+            pipe.position.set(0, 0.3, 0);
+            group.add(pipe);
+
+            // Water Tank
+            const tankGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.3, 16);
+            const tankMat = new THREE.MeshStandardMaterial({ 
+                color: 0x0ea5e9,
+                roughness: 0.2,
+                metalness: 0.6
+            });
+            const tank = new THREE.Mesh(tankGeo, tankMat);
+            tank.position.y = 0.75;
+            tank.castShadow = true;
+            group.add(tank);
+
+            // Tank Cap/Dome
+            const capGeo = new THREE.SphereGeometry(0.25, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+            const cap = new THREE.Mesh(capGeo, tankMat);
+            cap.position.y = 0.9;
+            group.add(cap);
+
+            // Tank bottom dome
+            const bottomCap = new THREE.Mesh(capGeo, tankMat);
+            bottomCap.position.y = 0.6;
+            bottomCap.rotation.x = Math.PI;
+            group.add(bottomCap);
+
+            group.position.set(x, 0, z);
             return group;
         }
 
@@ -2300,19 +2778,8 @@
         }
 
         // 生成并添加一辆新车
-        function spawnCar() {
-            // 找到所有道路
-            const roadKeys = [];
-            cityMap.forEach((cellObjs, key) => {
-                cellObjs.forEach(obj => {
-                    if (obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp') {
-                        roadKeys.push({ key, level: obj.level, obj });
-                    }
-                });
-            });
-
-            if (roadKeys.length === 0) return; // 没有道路不生成车
-            if (activeCars.length > Math.min(20, roadKeys.length * 2)) return; // 限制车辆总数
+        function spawnCar(roadKeys) {
+            if (!roadKeys || roadKeys.length === 0) return; // 没有道路不生成车
 
             // 随机选一个起点道路
             const startNode = roadKeys[Math.floor(Math.random() * roadKeys.length)];
@@ -2366,8 +2833,27 @@
 
         // 更新车流逻辑
         function updateTraffic() {
-            // 每隔一段时间尝试生成新车
-            if (Math.random() < 0.02) spawnCar();
+            // 找到所有道路
+            const roadKeys = [];
+            cityMap.forEach((cellObjs, key) => {
+                cellObjs.forEach(obj => {
+                    if (obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp') {
+                        roadKeys.push({ key, level: obj.level, obj });
+                    }
+                });
+            });
+
+            if (roadKeys.length > 0) {
+                // 根据道路长度，计算最大可容纳车辆数（最小 5 辆，最大 120 辆）
+                const maxCars = Math.min(120, Math.max(5, Math.floor(roadKeys.length * 0.35)));
+                if (activeCars.length < maxCars) {
+                    // 如果车辆少于最大容量的 50%，以较高概率（15%）快速生成；否则以 4% 的概率平稳生成
+                    const spawnProb = activeCars.length < maxCars * 0.5 ? 0.15 : 0.04;
+                    if (Math.random() < spawnProb) {
+                        spawnCar(roadKeys);
+                    }
+                }
+            }
 
             for (let i = activeCars.length - 1; i >= 0; i--) {
                 const car = activeCars[i];
@@ -2899,6 +3385,12 @@
 
                     // 桥梁特殊拆除逻辑：恢复水面
                     if (topObj.type === 'bridge') {
+                        if (simulationMode === 'simulation') {
+                            const refund = Math.round(BUILDING_CONFIGS.bridge.cost * 0.5);
+                            funds += refund;
+                            showToast(`已拆除 桥梁，退还资金 $${refund.toLocaleString()}`, 'success');
+                            updateHUD();
+                        }
                         objectsGroup.remove(topObj.mesh);
                         deleteObjAtLevel(key, topLevel);
                         
@@ -2910,6 +3402,17 @@
                             setObjAtLevel(key, 0, { type: 'water', mesh: newWaterMesh });
                         }
                         return;
+                    }
+
+                    // 正常的拆除资金退还
+                    const mainObjForDemolish = topObj.mainKey ? getObjAtLevel(topObj.mainKey, topLevel) : topObj;
+                    const demolishType = mainObjForDemolish ? mainObjForDemolish.type : topObj.type;
+                    const config = BUILDING_CONFIGS[demolishType];
+                    if (config && simulationMode === 'simulation') {
+                        const refund = Math.round(config.cost * 0.5);
+                        funds += refund;
+                        showToast(`已拆除 ${config.name}，退还资金 $${refund.toLocaleString()}`, 'success');
+                        updateHUD();
                     }
 
                     // 如果是占多格的建筑（非主节点）
@@ -2950,6 +3453,14 @@
 
                     // 水面上建桥逻辑：当前工具是直路且点击的是水面
                     if (mainObj.type === 'water' && currentTool === 'road') {
+                        if (simulationMode === 'simulation' && funds < BUILDING_CONFIGS.bridge.cost) {
+                            showToast(`资金不足！建造 桥梁 需要 $${BUILDING_CONFIGS.bridge.cost.toLocaleString()}`, 'warning');
+                            return;
+                        }
+                        if (simulationMode === 'simulation') {
+                            funds -= BUILDING_CONFIGS.bridge.cost;
+                            updateHUD();
+                        }
                         // 移除原来的水面
                         objectsGroup.remove(mainObj.mesh);
                         deleteObjAtLevel(`${rawGridX},${rawGridZ}`, 0);
@@ -2967,7 +3478,7 @@
                         return;
                     }
 
-                    // 旋转逻辑：同种工具点击，且属于可旋转类型
+                    // 旋转逻辑：同种工具点击，且属于可旋转类型 (免费)
                     const rotatableTypes = ['school', 'hospital', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl', 'road', 'road_curve', 'road_cross', 'road_t', 'bridge'];
                     if ((mainObj.type === currentTool && rotatableTypes.includes(currentTool)) || 
                         (mainObj.type === 'bridge' && currentTool === 'road')) { // 用道路工具点击桥也能旋转
@@ -2976,7 +3487,7 @@
                         return;
                     }
 
-                    // 更换样式逻辑：同种工具点击
+                    // 更换样式逻辑：同种工具点击 (免费)
                     if (mainObj.type === currentTool && currentTool === 'commercial') {
                         objectsGroup.remove(mainObj.mesh);
                         let nextStyle = (mainObj.mesh.userData.style + 1) % 8; // 增加到8种样式
@@ -3003,6 +3514,15 @@
 
                     // 道路替换逻辑
                     if (mainObj.type.startsWith('road') && currentTool.startsWith('road')) {
+                        const newConfig = BUILDING_CONFIGS[currentTool];
+                        if (newConfig && simulationMode === 'simulation') {
+                            if (funds < newConfig.cost) {
+                                showToast(`资金不足！建造 ${newConfig.name} 需要 $${newConfig.cost.toLocaleString()}`, 'warning');
+                                return;
+                            }
+                            funds -= newConfig.cost;
+                            updateHUD();
+                        }
                         objectsGroup.remove(mainObj.mesh);
                         let newMesh;
                         switch (currentTool) {
@@ -3020,6 +3540,16 @@
                     return; // 如果被占用，无论是否发生旋转/替换，都不再执行后续建造
                 } else {
                     // 建造逻辑
+                    const config = BUILDING_CONFIGS[currentTool];
+                    if (config && simulationMode === 'simulation') {
+                        if (funds < config.cost) {
+                            showToast(`资金不足！建造 ${config.name} 需要 $${config.cost.toLocaleString()}`, 'warning');
+                            return;
+                        }
+                        funds -= config.cost;
+                        updateHUD();
+                    }
+
                     let newMesh;
                     switch (currentTool) {
                         case 'residential': newMesh = createResidential(gridX, gridZ); break;
@@ -3037,6 +3567,8 @@
                         case 'police_station': newMesh = createPoliceStation(gridX, gridZ); break;
                         case 'amusement_park': newMesh = createAmusementPark(gridX, gridZ); break;
                         case 'oriental_pearl': newMesh = createOrientalPearl(gridX, gridZ); break;
+                        case 'solar_station': newMesh = createSolarStation(gridX, gridZ); break;
+                        case 'water_tower': newMesh = createWaterTower(gridX, gridZ); break;
                     }
 
                     if (newMesh) {
@@ -3106,6 +3638,15 @@
         const weatherBtn = document.getElementById('weather-btn');
         const weatherIcon = document.getElementById('weather-icon');
         const weatherText = document.getElementById('weather-text');
+
+        const visibilityBtn = document.getElementById('visibility-btn');
+        const visibilityIcon = document.getElementById('visibility-icon');
+        const visibilityText = document.getElementById('visibility-text');
+        let isFarVisibility = false;
+
+        const cloudsBtn = document.getElementById('clouds-btn');
+        const cloudsIcon = document.getElementById('clouds-icon');
+        const cloudsText = document.getElementById('clouds-text');
 
         // 切换昼夜
         timeBtn.addEventListener('click', () => {
@@ -3191,11 +3732,854 @@
             }
         });
 
+        // 切换能见度
+        visibilityBtn.addEventListener('click', () => {
+            isFarVisibility = !isFarVisibility;
+            if (isFarVisibility) {
+                visibilityIcon.textContent = '👓';
+                visibilityText.textContent = '超远能见度';
+                scene.fog.near = 150;
+                scene.fog.far = 600;
+                showToast('已切换至超远能见度，全局雾气消散。', 'success');
+            } else {
+                visibilityIcon.textContent = '👁️';
+                visibilityText.textContent = '默认能见度';
+                scene.fog.near = 20;
+                scene.fog.far = 50;
+                showToast('已切换至默认能见度，远端雾气合拢。', 'success');
+            }
+        });
+
+        // 切换云朵显示/隐藏
+        cloudsBtn.addEventListener('click', () => {
+            cloudsGroup.visible = !cloudsGroup.visible;
+            if (cloudsGroup.visible) {
+                cloudsIcon.textContent = '☁️';
+                cloudsText.textContent = '显示云朵';
+                showToast('已显示云朵', 'success');
+            } else {
+                cloudsIcon.textContent = '💨';
+                cloudsText.textContent = '隐藏云朵';
+                showToast('已隐藏云朵', 'success');
+            }
+        });
+
+        // ==========================================
+        //         市政指挥中心与仿真系统核心逻辑
+        // ==========================================
+
+        let totalIncomeRes = 0;
+        let totalIncomeCom = 0;
+        let carbonEmission = 0;
+
+        // 提示框 Toast 通知
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const bgColors = {
+                info: 'bg-blue-600',
+                success: 'bg-emerald-600',
+                warning: 'bg-amber-500',
+                error: 'bg-red-600'
+            };
+            toast.className = `${bgColors[type] || 'bg-gray-800'} text-white px-3 py-1.5 rounded-xl shadow-lg text-[10px] font-bold transition-all duration-300 transform translate-y-2 opacity-0 flex items-center gap-1.5 pointer-events-auto mb-2`;
+            
+            const icons = {
+                info: 'ℹ️',
+                success: '✅',
+                warning: '⚠️',
+                error: '🚨'
+            };
+            toast.innerHTML = `<span>${icons[type] || '🔔'}</span><span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 50);
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-[-10px]', 'opacity-0');
+                setTimeout(() => {
+                    if (toast.parentNode === container) container.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+
+        // 计算公共服务空间覆盖率
+        function calculateSpatialCoverage() {
+            let coveredByPolice = 0;
+            let coveredByFire = 0;
+            let coveredByHospital = 0;
+            let coveredBySchool = 0;
+            let totalBuildings = 0;
+            
+            const policeCoords = [];
+            const fireCoords = [];
+            const hospitalCoords = [];
+            const schoolCoords = [];
+            const buildings = [];
+
+            cityMap.forEach((arr, key) => {
+                arr.forEach(obj => {
+                    if (obj.mainKey) return;
+                    const [x, z] = key.split(',').map(Number);
+                    if (obj.type === 'police_station') policeCoords.push({x, z});
+                    else if (obj.type === 'fire_station') fireCoords.push({x, z});
+                    else if (obj.type === 'hospital') hospitalCoords.push({x, z});
+                    else if (obj.type === 'school') schoolCoords.push({x, z});
+                    else if (['residential', 'commercial'].includes(obj.type)) {
+                        buildings.push({x, z});
+                    }
+                });
+            });
+
+            totalBuildings = buildings.length;
+            if (totalBuildings === 0) return { police: 100, fire: 100, hospital: 100, school: 100 };
+
+            buildings.forEach(b => {
+                // 警局半径 16格
+                const nearPolice = policeCoords.some(p => Math.hypot(p.x - b.x, p.z - b.z) <= 16);
+                if (nearPolice) coveredByPolice++;
+                // 消防半径 16格
+                const nearFire = fireCoords.some(f => Math.hypot(f.x - b.x, f.z - b.z) <= 16);
+                if (nearFire) coveredByFire++;
+                // 医院半径 20格
+                const nearHospital = hospitalCoords.some(h => Math.hypot(h.x - b.x, h.z - b.z) <= 20);
+                if (nearHospital) coveredByHospital++;
+                // 学校半径 20格
+                const nearSchool = schoolCoords.some(s => Math.hypot(s.x - b.x, s.z - b.z) <= 20);
+                if (nearSchool) coveredBySchool++;
+            });
+
+            return {
+                police: Math.round((coveredByPolice / totalBuildings) * 100),
+                fire: Math.round((coveredByFire / totalBuildings) * 100),
+                hospital: Math.round((coveredByHospital / totalBuildings) * 100),
+                school: Math.round((coveredBySchool / totalBuildings) * 100)
+            };
+        }
+
+        // 计算城市环境绿化评分
+        function calculateEcoScore() {
+            let treeCount = 0;
+            let flowerCount = 0;
+            let waterCount = 0;
+            let residentialCount = 0;
+            let commercialCount = 0;
+
+            cityMap.forEach((arr) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return;
+                    if (obj.type === 'tree') treeCount++;
+                    else if (obj.type === 'flower') flowerCount++;
+                    else if (obj.type === 'water') waterCount++;
+                    else if (obj.type === 'residential') residentialCount++;
+                    else if (obj.type === 'commercial') commercialCount++;
+                });
+            });
+
+            const totalBuildings = residentialCount + commercialCount;
+            if (totalBuildings === 0) return 100; // 无建筑时自然环境完美
+            
+            // 绿化与水景的比率，2-3棵树支持1个建筑，分值升高
+            const score = Math.round(((treeCount * 5 + flowerCount * 3 + waterCount * 2) / (totalBuildings + 1)) * 40);
+            return Math.max(0, Math.min(100, score));
+        }
+
+        // 绘制 Sparkline 趋势图表
+        function drawSparkline() {
+            const canvas = document.getElementById('trend-sparkline');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            // 绘制网格背景线
+            ctx.strokeStyle = 'rgba(241, 245, 249, 0.8)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, (h / 4) * i);
+                ctx.lineTo(w, (h / 4) * i);
+                ctx.stroke();
+            }
+
+            // 辅助画线函数
+            function drawTrend(data, color, fillGradStart, fillGradEnd, minVal, maxVal) {
+                if (data.length < 2) return;
+                const padX = 5;
+                const padY = 5;
+                const stepX = (w - padX * 2) / (data.length - 1);
+                
+                ctx.beginPath();
+                for (let i = 0; i < data.length; i++) {
+                    const val = data[i];
+                    const x = padX + i * stepX;
+                    const y = h - padY - ((val - minVal) / (maxVal - minVal || 1)) * (h - padY * 2);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                
+                // 笔触
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2.0;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+
+                // 填充渐变色
+                ctx.lineTo(padX + (data.length - 1) * stepX, h);
+                ctx.lineTo(padX, h);
+                ctx.closePath();
+                const gradient = ctx.createLinearGradient(0, 0, 0, h);
+                gradient.addColorStop(0, fillGradStart);
+                gradient.addColorStop(1, fillGradEnd);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            }
+
+            // 绘制人口 (蓝色)
+            const maxPop = Math.max(100, ...historyData.population);
+            drawTrend(historyData.population, '#3b82f6', 'rgba(59, 130, 246, 0.12)', 'rgba(59, 130, 246, 0.0)', 0, maxPop);
+
+            // 绘制幸福度 (橙黄)
+            drawTrend(historyData.happiness, '#eab308', 'rgba(234, 179, 8, 0.08)', 'rgba(234, 179, 8, 0.0)', 0, 100);
+
+            // 绘制资金 (绿色，仅在仿真模式)
+            if (simulationMode === 'simulation') {
+                const maxFunds = Math.max(100000, ...historyData.funds);
+                const minFunds = Math.min(0, ...historyData.funds);
+                drawTrend(historyData.funds, '#10b981', 'rgba(16, 185, 129, 0.08)', 'rgba(16, 185, 129, 0.0)', minFunds, maxFunds);
+            }
+        }
+
+        // 更新 HUD 静态指标界面
+        function updateHUD() {
+            const fundsEl = document.getElementById('hud-funds');
+            const miniFundsEl = document.getElementById('mini-funds');
+            const flowEl = document.getElementById('hud-funds-flow');
+            
+            if (simulationMode === 'sandbox') {
+                if (fundsEl) fundsEl.textContent = '无限';
+                if (miniFundsEl) miniFundsEl.textContent = '💵 无限';
+                if (flowEl) {
+                    flowEl.textContent = '无支出/分';
+                    flowEl.className = "text-[8px] text-gray-400 font-bold";
+                }
+            } else {
+                if (fundsEl) fundsEl.textContent = `$${funds.toLocaleString()}`;
+                if (miniFundsEl) {
+                    if (funds >= 1000000) {
+                        miniFundsEl.textContent = `💵 $${(funds/1000000).toFixed(1)}M`;
+                    } else {
+                        miniFundsEl.textContent = `💵 $${Math.round(funds/1000)}K`;
+                    }
+                }
+                
+                if (flowEl) {
+                    const netFlow = totalIncome - totalExpenses;
+                    if (netFlow >= 0) {
+                        flowEl.textContent = `+$${netFlow.toLocaleString()}/分`;
+                        flowEl.className = "text-[8px] text-green-500 font-bold";
+                    } else {
+                        flowEl.textContent = `-$${Math.abs(netFlow).toLocaleString()}/分`;
+                        flowEl.className = "text-[8px] text-red-500 font-bold";
+                    }
+                }
+            }
+
+            const popEl = document.getElementById('hud-population');
+            const miniPopEl = document.getElementById('mini-pop');
+            if (popEl) popEl.textContent = `${population.toLocaleString()} 人`;
+            if (miniPopEl) miniPopEl.textContent = `👥 ${population}`;
+
+            const happyEl = document.getElementById('hud-happiness');
+            const miniHappyEl = document.getElementById('mini-happy');
+            const happyEmojiEl = document.getElementById('hud-happy-emoji');
+            
+            if (happyEl) happyEl.textContent = `${happiness}%`;
+            if (miniHappyEl) miniHappyEl.textContent = `😊 ${happiness}%`;
+            
+            if (happyEmojiEl) {
+                let emoji = '🙂 良好';
+                let colorClass = 'text-yellow-600';
+                if (happiness >= 85) { emoji = '😊 极佳'; colorClass = 'text-green-600'; }
+                else if (happiness < 40) { emoji = '😡 崩溃'; colorClass = 'text-red-600'; }
+                else if (happiness < 60) { emoji = '😐 抱怨'; colorClass = 'text-yellow-600'; }
+                happyEmojiEl.textContent = emoji;
+                happyEmojiEl.className = `text-[8px] font-bold ${colorClass}`;
+            }
+
+            const resSlider = document.getElementById('tax-res-slider');
+            const comSlider = document.getElementById('tax-com-slider');
+            const resVal = document.getElementById('tax-res-val');
+            const comVal = document.getElementById('tax-com-val');
+            if (resSlider && resVal) resVal.textContent = `${resSlider.value}%`;
+            if (comSlider && comVal) comVal.textContent = `${comSlider.value}%`;
+
+            const muniTaxRes = document.getElementById('muni-tax-res');
+            const muniTaxCom = document.getElementById('muni-tax-com');
+            const muniIncomeTotal = document.getElementById('muni-income-total');
+            const muniMaintTotal = document.getElementById('muni-maint-total');
+            const muniNetFlow = document.getElementById('muni-net-flow');
+
+            if (muniTaxRes) muniTaxRes.textContent = `+$${totalIncomeRes.toLocaleString()}`;
+            if (muniTaxCom) muniTaxCom.textContent = `+$${totalIncomeCom.toLocaleString()}`;
+            if (muniIncomeTotal) muniIncomeTotal.textContent = `+$${totalIncome.toLocaleString()}`;
+            if (muniMaintTotal) muniMaintTotal.textContent = `-$${totalExpenses.toLocaleString()}`;
+            if (muniNetFlow) {
+                const netFlow = totalIncome - totalExpenses;
+                if (netFlow >= 0) {
+                    muniNetFlow.textContent = `+$${netFlow.toLocaleString()}`;
+                    muniNetFlow.className = "text-right font-black border-t border-gray-100 pt-1 mt-0.5 text-green-600";
+                } else {
+                    muniNetFlow.textContent = `-$${Math.abs(netFlow).toLocaleString()}`;
+                    muniNetFlow.className = "text-right font-black border-t border-gray-200 pt-1 mt-0.5 text-red-500";
+                }
+            }
+
+            const pDemandEl = document.getElementById('muni-power-demand');
+            const pCapEl = document.getElementById('muni-power-capacity');
+            const pBar = document.getElementById('muni-power-bar');
+            const pStatus = document.getElementById('muni-power-status');
+
+            if (pDemandEl) pDemandEl.textContent = electricityDemand;
+            if (pCapEl) pCapEl.textContent = electricityCapacity;
+            if (pBar) {
+                const pct = electricityCapacity > 0 ? Math.min(100, (electricityDemand / electricityCapacity) * 100) : (electricityDemand > 0 ? 100 : 0);
+                pBar.style.width = `${pct}%`;
+                if (electricityDemand > electricityCapacity) {
+                    pBar.className = "bg-red-500 h-2 rounded-full transition-all duration-500";
+                    if (pStatus) { pStatus.textContent = '电力不足'; pStatus.className = 'text-red-500 font-bold animate-pulse'; }
+                } else {
+                    pBar.className = "bg-indigo-600 h-2 rounded-full transition-all duration-500";
+                    if (pStatus) { pStatus.textContent = '供应充足'; pStatus.className = 'text-green-600'; }
+                }
+            }
+
+            const wDemandEl = document.getElementById('muni-water-demand');
+            const wCapEl = document.getElementById('muni-water-capacity');
+            const wBar = document.getElementById('muni-water-bar');
+            const wStatus = document.getElementById('muni-water-status');
+
+            if (wDemandEl) wDemandEl.textContent = waterDemand;
+            if (wCapEl) wCapEl.textContent = waterCapacity;
+            if (wBar) {
+                const pct = waterCapacity > 0 ? Math.min(100, (waterDemand / waterCapacity) * 100) : (waterDemand > 0 ? 100 : 0);
+                wBar.style.width = `${pct}%`;
+                if (waterDemand > waterCapacity) {
+                    wBar.className = "bg-red-500 h-2 rounded-full transition-all duration-500";
+                    if (wStatus) { wStatus.textContent = '供水短缺'; wStatus.className = 'text-red-500 font-bold animate-pulse'; }
+                } else {
+                    wBar.className = "bg-blue-500 h-2 rounded-full transition-all duration-500";
+                    if (wStatus) { wStatus.textContent = '供应充足'; wStatus.className = 'text-green-600'; }
+                }
+            }
+
+            const ecoBar = document.getElementById('muni-eco-bar');
+            const ecoText = document.getElementById('muni-eco-text');
+            const ecoVal = document.getElementById('muni-eco-val');
+            const carbonVal = document.getElementById('muni-carbon-val');
+            
+            const ecoScore = calculateEcoScore();
+            if (ecoVal) ecoVal.textContent = `${ecoScore}/100`;
+            if (ecoBar) {
+                ecoBar.style.width = `${ecoScore}%`;
+                if (ecoScore >= 75) ecoBar.className = "bg-emerald-500 h-2 rounded-full transition-all duration-500";
+                else if (ecoScore < 40) ecoBar.className = "bg-red-500 h-2 rounded-full transition-all duration-500";
+                else ecoBar.className = "bg-yellow-500 h-2 rounded-full transition-all duration-500";
+            }
+            if (ecoText) {
+                if (ecoScore >= 75) { ecoText.textContent = '绿色生态'; ecoText.className = 'text-green-600'; }
+                else if (ecoScore < 40) { ecoText.textContent = '污染预警'; ecoText.className = 'text-red-500 font-bold animate-pulse'; }
+                else { ecoText.textContent = '一般生态'; ecoText.className = 'text-yellow-600'; }
+            }
+            if (carbonVal) {
+                if (carbonEmission > 1000) carbonVal.textContent = '严重超标';
+                else if (carbonEmission > 500) carbonVal.textContent = '超标';
+                else if (carbonEmission > 150) carbonVal.textContent = '中等';
+                else carbonVal.textContent = '绿色环保';
+            }
+        }
+
+        // 仿真周期核心计算步骤
+        function updateSimulationStep() {
+            let residentialCount = 0;
+            let commercialCount = 0;
+            let treeCount = 0;
+            let flowerCount = 0;
+            let roadCount = 0;
+            let waterCount = 0;
+            let solarCount = 0;
+            let waterTowerCount = 0;
+            let hospitalCount = 0;
+            let schoolCount = 0;
+            let fireStationCount = 0;
+            let policeStationCount = 0;
+            let amusementParkCount = 0;
+            let landmarkCount = 0;
+            let totalObjects = 0;
+
+            cityMap.forEach((arr) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return;
+
+                    totalObjects++;
+                    if (obj.type === 'residential') residentialCount++;
+                    else if (obj.type === 'commercial') commercialCount++;
+                    else if (obj.type === 'tree') treeCount++;
+                    else if (obj.type === 'flower') flowerCount++;
+                    else if (obj.type.startsWith('road') || obj.type === 'bridge' || obj.type === 'ramp') roadCount++;
+                    else if (obj.type === 'water') waterCount++;
+                    else if (obj.type === 'solar_station') solarCount++;
+                    else if (obj.type === 'water_tower') waterTowerCount++;
+                    else if (obj.type === 'hospital') hospitalCount++;
+                    else if (obj.type === 'school') schoolCount++;
+                    else if (obj.type === 'fire_station') fireStationCount++;
+                    else if (obj.type === 'police_station') policeStationCount++;
+                    else if (obj.type === 'amusement_park') amusementParkCount++;
+                    else if (obj.type === 'oriental_pearl') landmarkCount++;
+                });
+            });
+
+            // 1. 电网与供水网格容量更新
+            electricityCapacity = 150 + solarCount * 2500;
+            waterCapacity = 150 + waterTowerCount * 2000;
+
+            // 电力消耗
+            electricityDemand = (
+                residentialCount * 80 +
+                commercialCount * 120 +
+                waterTowerCount * 50 + // 水塔自身耗电
+                hospitalCount * 200 +
+                schoolCount * 150 +
+                fireStationCount * 120 +
+                policeStationCount * 120 +
+                amusementParkCount * 250 +
+                landmarkCount * 400
+            );
+
+            // 水资源消耗
+            waterDemand = (
+                residentialCount * 80 +
+                commercialCount * 100 +
+                solarCount * 10 + // 太阳能站维护耗水
+                hospitalCount * 150 +
+                schoolCount * 120 +
+                fireStationCount * 100 +
+                policeStationCount * 100 +
+                amusementParkCount * 200 +
+                landmarkCount * 300
+            );
+
+            const isPowerShortage = electricityDemand > electricityCapacity;
+            const isWaterShortage = waterDemand > waterCapacity;
+
+            // 电网过载导致限电熄灯
+            windowMaterials.forEach(mat => {
+                if (mat.userData && mat.userData.isCarLight) {
+                    mat.opacity = isNight ? 1 : 0;
+                } else if (mat.userData && mat.userData.isCloud) {
+                    mat.color.setHex(isNight ? 0x334155 : (isRaining ? 0x94a3b8 : 0xffffff));
+                } else if (mat.userData && mat.userData.isStructureRing) {
+                    mat.emissiveIntensity = isNight ? (isPowerShortage ? 0.05 : 0.3) : 0;
+                } else {
+                    if (isNight) {
+                        if (isPowerShortage && !mat.userData?.isCarBody) {
+                            mat.emissiveIntensity = 0.05; // 电力短缺，大楼熄灯
+                        } else {
+                            mat.emissiveIntensity = mat.userData && mat.userData.isCarBody ? 0.4 : 0.7;
+                        }
+                    } else {
+                        mat.emissiveIntensity = 0;
+                    }
+                }
+            });
+
+            // 2. 公共服务空间覆盖度与临街率
+            const coverages = calculateSpatialCoverage();
+            
+            let isolatedBuildings = 0;
+            let totalBuildings = 0;
+            cityMap.forEach((arr, key) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return;
+                    if (['residential', 'commercial', 'hospital', 'school', 'fire_station', 'police_station', 'amusement_park', 'oriental_pearl'].includes(obj.type)) {
+                        totalBuildings++;
+                        const [baseX, baseZ] = key.split(',').map(Number);
+                        const size = obj.mesh.userData.size || 1;
+                        let hasRoad = false;
+                        
+                        for(let i=0; i<size; i++) {
+                            for(let j=0; j<size; j++) {
+                                const x = baseX + i;
+                                const z = baseZ + j;
+                                const neighbors = [`${x+1},${z}`, `${x-1},${z}`, `${x},${z+1}`, `${x},${z-1}`];
+                                neighbors.forEach(nKey => {
+                                    if (obj.mesh.userData.occupiedKeys && obj.mesh.userData.occupiedKeys.includes(nKey)) return;
+                                    if (cityMap.has(nKey)) {
+                                        const cellObjs = cityMap.get(nKey);
+                                        cellObjs.forEach(nObj => {
+                                            if (nObj.type.startsWith('road') || nObj.type === 'bridge' || nObj.type === 'ramp') hasRoad = true;
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                        if (!hasRoad) isolatedBuildings++;
+                    }
+                });
+            });
+
+            // 碳中和指数
+            const ecoScore = calculateEcoScore();
+            carbonEmission = Math.max(0, roadCount * 6 + commercialCount * 30 + residentialCount * 5 - treeCount * 20 - flowerCount * 10);
+
+            // 3. 幸福度综合计算
+            let powerSat = electricityDemand > 0 ? Math.min(1, electricityCapacity / electricityDemand) : 1;
+            let waterSat = waterDemand > 0 ? Math.min(1, waterCapacity / waterDemand) : 1;
+            
+            let taxSatRes = Math.max(0, 100 - (taxRateResidential - 10) * 4);
+            let taxSatCom = Math.max(0, 100 - (taxRateCommercial - 10) * 4);
+            let averageTaxSat = (taxSatRes + taxSatCom) / 2;
+
+            // 就业率
+            let jobsAvailable = commercialCount * 150 + amusementParkCount * 50 + landmarkCount * 100;
+            let maxWorkers = residentialCount * 80;
+            let employmentRate = maxWorkers > 0 ? Math.min(1, jobsAvailable / maxWorkers) : 1;
+
+            let compositeHappiness = (
+                (coverages.police + coverages.fire) / 2 * 0.20 +
+                coverages.hospital * 0.15 +
+                coverages.school * 0.15 +
+                ecoScore * 0.15 +
+                (1 - (isolatedBuildings / (totalBuildings || 1))) * 100 * 0.10 +
+                ((powerSat + waterSat) / 2) * 100 * 0.15 +
+                averageTaxSat * 0.10
+            );
+
+            if (employmentRate < 0.8) {
+                compositeHappiness -= (0.8 - employmentRate) * 50; // 失业惩罚
+            }
+            if (isPowerShortage) compositeHappiness -= 15;
+            if (isWaterShortage) compositeHappiness -= 15;
+
+            happiness = Math.max(0, Math.min(100, Math.round(compositeHappiness)));
+
+            // 4. 动态人口流动模型
+            let housingCapacity = residentialCount * 100;
+            let popChange = 0;
+            if (housingCapacity > population) {
+                if (happiness > 50) {
+                    let baseGrowth = (housingCapacity - population) * 0.15;
+                    let attrMultiplier = ((happiness - 50) / 50) * (1.5 - taxRateResidential / 20);
+                    popChange = Math.round(baseGrowth * attrMultiplier + 3);
+                } else {
+                    popChange = Math.round((happiness - 50) * 0.4);
+                }
+            } else if (housingCapacity < population) {
+                popChange = Math.round((housingCapacity - population) * 0.25);
+            } else {
+                if (happiness < 45) {
+                    popChange = -Math.round(population * 0.015) - 3;
+                } else if (happiness > 75) {
+                    popChange = Math.round(Math.random() * 4);
+                }
+            }
+            
+            const popFlowEl = document.getElementById('hud-pop-flow');
+            if (popFlowEl) {
+                if (popChange > 2) {
+                    popFlowEl.textContent = `↗ 增长 (${popChange})`;
+                    popFlowEl.className = "text-[8px] text-green-500 font-bold";
+                } else if (popChange < -2) {
+                    popFlowEl.textContent = `↘ 流失 (${popChange})`;
+                    popFlowEl.className = "text-[8px] text-red-500 font-bold";
+                } else {
+                    popFlowEl.textContent = "稳定";
+                    popFlowEl.className = "text-[8px] text-gray-400 font-bold";
+                }
+            }
+            
+            population = Math.max(0, population + popChange);
+            population = Math.min(population, Math.round(housingCapacity * 1.15));
+
+            // 5. 政策与内阁简报生成
+            let suggestions = [];
+            let grade = 'A';
+
+            if (jobsAvailable > 0 && population > jobsAvailable * 1.5) {
+                population = Math.floor(jobsAvailable * 1.5); // 没有岗位则限制吸引人口
+                suggestions.push("⚠️ 就业岗位严重匮乏！市民因失业而迁出，请多规划 [商业] 🏢");
+            } else if (jobsAvailable > population * 2 && population > 0) {
+                suggestions.push("💡 城市正处于用工荒，商业运转受限！建议建造更多 [住宅] 🏠");
+            }
+
+            // 6. 财务财政流水核算 (每分钟)
+            totalIncomeRes = Math.round(population * (taxRateResidential / 100) * 15);
+            totalIncomeCom = Math.round(commercialCount * 150 * (taxRateCommercial / 100) * 20);
+            totalIncome = totalIncomeRes + totalIncomeCom;
+
+            let maintenanceTotal = 0;
+            cityMap.forEach((arr) => {
+                arr.forEach((obj) => {
+                    if (obj.mainKey) return;
+                    const config = BUILDING_CONFIGS[obj.type];
+                    if (config) maintenanceTotal += config.maint;
+                });
+            });
+            totalExpenses = maintenanceTotal;
+
+            if (simulationMode === 'simulation') {
+                const stepCash = Math.round((totalIncome - totalExpenses) / 12);
+                funds += stepCash;
+
+                // 财政破产触发
+                if (funds <= 0) {
+                    funds = 0;
+                    happiness = Math.max(0, happiness - 20);
+                    suggestions.push("🚨 市政金库赤字！请提高税率或立刻拆除维护费用高昂的服务建筑！");
+                    showToast('城市金库告急破产！满意度崩塌！', 'error');
+                }
+            }
+
+            // 空间规划问题警报
+            if (isPowerShortage) {
+                suggestions.push("⚡ 城市大面积断电！请建造 [太阳能电站] 提供能源支撑。");
+                showToast('城市电网发生严重超载！', 'warning');
+            }
+            if (isWaterShortage) {
+                suggestions.push("🚰 城市水压不足断水！请建造 [市政水塔] 提升供水能力。");
+                showToast('市政供水管道发生干涸！', 'warning');
+            }
+            if (isolatedBuildings > 0) {
+                suggestions.push(`🛣️ 有 ${isolatedBuildings} 栋建筑未接入道路网，市民无法出行。`);
+            }
+            if (happiness < 45) {
+                suggestions.push("😡 民怨沸腾！幸福度极低。请尽快降低税率，并在居民区旁建设绿化。");
+            }
+            if (coverages.police < 65) suggestions.push("👮 警务治安覆盖较低，犯罪率暗流涌动，请增建 [警察局]。");
+            if (coverages.fire < 65) suggestions.push("🚒 消防应急响应范围不足，火灾隐患较大，请增建 [消防局]。");
+            if (coverages.hospital < 65) suggestions.push("🏥 市民无法及时获得医疗救治，疾病蔓延，请增建 [医院]。");
+            if (coverages.school < 65) suggestions.push("🏫 学位紧张，市民受教育权无法满足，请增建 [学校]。");
+
+            // 规划评级定档
+            if (happiness >= 90 && totalIncome > totalExpenses) grade = 'S (模范智慧城市)';
+            else if (happiness >= 80) grade = 'A (优秀智慧都市)';
+            else if (happiness >= 60) grade = 'B (正常运转城镇)';
+            else if (happiness >= 40) grade = 'C (建设落后城区)';
+            else grade = 'D (无秩序平民区)';
+
+            const gradeEl = document.getElementById('advisory-grade');
+            const listEl = document.getElementById('advisory-list');
+            if (gradeEl) gradeEl.textContent = grade;
+            if (listEl) {
+                if (suggestions.length === 0) {
+                    listEl.innerHTML = "<li class='text-green-600 font-bold'>✅ 城市规划非常出色！市民幸福安康，财政稳步攀升。</li>";
+                } else {
+                    listEl.innerHTML = suggestions.map(s => `<li>${s}</li>`).join('');
+                }
+            }
+
+            // 更新警、消、医、学进度条
+            const covMap = {
+                police: coverages.police,
+                fire: coverages.fire,
+                hospital: coverages.hospital,
+                school: coverages.school
+            };
+            Object.keys(covMap).forEach(key => {
+                const textEl = document.getElementById(`cov-${key}`);
+                const barEl = document.getElementById(`cov-${key}-bar`);
+                const val = covMap[key];
+                if (textEl) textEl.textContent = `${val}%`;
+                if (barEl) {
+                    barEl.style.width = `${val}%`;
+                    if (val >= 80) barEl.className = "bg-green-600 h-1 rounded-full transition-all duration-500";
+                    else if (val < 40) barEl.className = "bg-red-500 h-1 rounded-full transition-all duration-500";
+                    else barEl.className = "bg-yellow-500 h-1 rounded-full transition-all duration-500";
+                }
+            });
+
+            // 历史数据存储
+            historyData.population.push(population);
+            historyData.funds.push(funds);
+            historyData.happiness.push(happiness);
+
+            if (historyData.population.length > 30) {
+                historyData.population.shift();
+                historyData.funds.shift();
+                historyData.happiness.shift();
+            }
+
+            updateHUD();
+            drawSparkline();
+        }
+
+        function setupDashboardListeners() {
+            // Tab 切换逻辑
+            const tabs = ['overview', 'utilities', 'advisory'];
+            tabs.forEach(tab => {
+                const btn = document.getElementById(`tab-${tab}-btn`);
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        tabs.forEach(t => {
+                            const b = document.getElementById(`tab-${t}-btn`);
+                            const pane = document.getElementById(`tab-${t}`);
+                            if (b) {
+                                b.classList.remove('border-indigo-500', 'text-indigo-600');
+                                b.classList.add('border-transparent', 'text-gray-500');
+                            }
+                            if (pane) pane.classList.add('hidden');
+                        });
+                        
+                        btn.classList.add('border-indigo-500', 'text-indigo-600');
+                        btn.classList.remove('border-transparent', 'text-gray-500');
+                        const pane = document.getElementById(`tab-${tab}`);
+                        if (pane) pane.classList.remove('hidden');
+                    });
+                }
+            });
+
+            // 税率滑动条监听
+            const taxResSlider = document.getElementById('tax-res-slider');
+            const taxComSlider = document.getElementById('tax-com-slider');
+            if (taxResSlider) {
+                taxResSlider.addEventListener('input', () => {
+                    taxRateResidential = parseInt(taxResSlider.value);
+                    updateHUD();
+                });
+            }
+            if (taxComSlider) {
+                taxComSlider.addEventListener('input', () => {
+                    taxRateCommercial = parseInt(taxComSlider.value);
+                    updateHUD();
+                });
+            }
+
+            // 沙盒模式切换
+            const toggleModeBtn = document.getElementById('toggle-sandbox-btn');
+            const modeIndicator = document.getElementById('simulation-mode-indicator');
+            if (toggleModeBtn) {
+                toggleModeBtn.addEventListener('click', () => {
+                    if (simulationMode === 'simulation') {
+                        simulationMode = 'sandbox';
+                        if (modeIndicator) {
+                            modeIndicator.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> 沙盒创造模式';
+                        }
+                        showToast('已切换至沙盒模式：资金无限', 'info');
+                    } else {
+                        simulationMode = 'simulation';
+                        if (modeIndicator) {
+                            modeIndicator.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> 仿真挑战模式';
+                        }
+                        funds = 100000;
+                        showToast('已切换至仿真模式：资金重置为 $100K', 'info');
+                    }
+                    updateHUD();
+                    drawSparkline();
+                });
+            }
+
+            // 伸缩折叠侧边栏
+            const sidebar = document.getElementById('sidebar-dashboard');
+            const collapseBtn = document.getElementById('collapse-dashboard-btn');
+            const miniHud = document.getElementById('mini-hud');
+            const fullDashboard = document.getElementById('full-dashboard');
+            const expandBtn = document.getElementById('expand-dashboard-btn');
+
+            if (collapseBtn && sidebar && miniHud && fullDashboard) {
+                collapseBtn.addEventListener('click', () => {
+                    fullDashboard.classList.add('hidden');
+                    miniHud.classList.remove('hidden');
+                    sidebar.style.width = '240px';
+                    sidebar.classList.remove('max-h-[82vh]');
+                });
+            }
+            if (expandBtn && sidebar && miniHud && fullDashboard) {
+                expandBtn.addEventListener('click', () => {
+                    miniHud.classList.add('hidden');
+                    fullDashboard.classList.remove('hidden');
+                    sidebar.style.width = '350px';
+                    sidebar.classList.add('max-h-[82vh]');
+                    setTimeout(drawSparkline, 100);
+                });
+            }
+            
+            // 底部工具栏电脑端鼠标滚轮及拖拽滚动支持
+            const toolbar = document.getElementById('bottom-toolbar');
+            if (toolbar) {
+                // 1. 鼠标滚轮重定向 (纵向滚动转横向)
+                toolbar.addEventListener('wheel', (e) => {
+                    if (e.deltaY !== 0) {
+                        e.preventDefault();
+                        toolbar.scrollLeft += e.deltaY * 0.8; // 适当平滑
+                    }
+                });
+
+                // 2. 鼠标拖拽拖动 (Grab to Scroll)
+                let isDown = false;
+                let startX;
+                let scrollLeft;
+                let hasMoved = false;
+
+                toolbar.style.cursor = 'grab';
+
+                toolbar.addEventListener('mousedown', (e) => {
+                    isDown = true;
+                    hasMoved = false;
+                    toolbar.style.cursor = 'grabbing';
+                    startX = e.pageX - toolbar.offsetLeft;
+                    scrollLeft = toolbar.scrollLeft;
+                });
+
+                toolbar.addEventListener('mouseleave', () => {
+                    isDown = false;
+                    toolbar.style.cursor = 'grab';
+                });
+
+                toolbar.addEventListener('mouseup', (e) => {
+                    isDown = false;
+                    toolbar.style.cursor = 'grab';
+                    
+                    // 如果发生了明显的拖拽位移，则阻止子元素的点击行为
+                    if (hasMoved) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
+                });
+
+                toolbar.addEventListener('mousemove', (e) => {
+                    if (!isDown) return;
+                    const x = e.pageX - toolbar.offsetLeft;
+                    const walk = (x - startX) * 1.5;
+                    if (Math.abs(walk) > 5) {
+                        hasMoved = true;
+                    }
+                    toolbar.scrollLeft = scrollLeft - walk;
+                });
+
+                // 阻止子按钮在拖拽时意外触发 click
+                toolbar.addEventListener('click', (e) => {
+                    if (hasMoved) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        hasMoved = false; // 重置
+                    }
+                }, true); // 使用捕获阶段拦截点击
+            }
+        }
+
         // --- 8. 存档系统 (保存与读取) ---
         const saveBtn = document.getElementById('save-btn');
         const loadBtn = document.getElementById('load-btn');
         const exportBtn = document.getElementById('export-btn');
         const importBtn = document.getElementById('import-btn');
+        const demo30Btn = document.getElementById('demo-30-btn');
+        const demo60Btn = document.getElementById('demo-60-btn');
+        const screenshotBtn = document.getElementById('screenshot-btn');
         const fileInput = document.getElementById('file-input');
         const saveStatus = document.getElementById('save-status');
 
@@ -3203,6 +4587,463 @@
             saveStatus.textContent = msg;
             saveStatus.style.color = color;
             setTimeout(() => saveStatus.textContent = '', 3000);
+        }
+
+        // 动态生成符合高标准规划的美观大气城市示例地图 (30x30)
+        function getExampleCityData30() {
+            const buildings = [];
+            const gridSize = 30;
+            const occupied = new Set();
+            
+            function addB(type, x, z, level = 0, orientation = 0, extra = {}) {
+                const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                buildings.push({
+                    key: key,
+                    level: level,
+                    type: type,
+                    x: x,
+                    z: z,
+                    orientation: orientation,
+                    ...extra
+                });
+            }
+
+            function placeService(type, x, z) {
+                addB(type, x, z);
+                occupied.add(`${x.toFixed(1)},${z.toFixed(1)}`);
+                occupied.add(`${(x + 1).toFixed(1)},${z.toFixed(1)}`);
+                occupied.add(`${x.toFixed(1)},${(z + 1).toFixed(1)}`);
+                occupied.add(`${(x + 1).toFixed(1)},${(z + 1).toFixed(1)}`);
+            }
+
+            // 1. 生成蜿蜒的河流 (北部 z = -9.5 左右正弦波)
+            const riverCells = new Set();
+            for (let x = -14.5; x <= 14.5; x += 1.0) {
+                const z = -9.5 + Math.round(Math.sin(x / 3) * 1);
+                const key1 = `${x.toFixed(1)},${z.toFixed(1)}`;
+                const key2 = `${x.toFixed(1)},${(z + 1).toFixed(1)}`;
+                riverCells.add(key1);
+                riverCells.add(key2);
+                addB('water', x, z, 0);
+                addB('water', x, z + 1, 0);
+                occupied.add(key1);
+                occupied.add(key2);
+            }
+
+            // 2. 规划主干道与分支路网
+            const roadMap = new Map();
+
+            // 纵向直道
+            const verticalXs = [-10.5, 2.5, 10.5];
+            verticalXs.forEach(x => {
+                for (let z = -14.5; z <= 14.5; z += 1.0) {
+                    roadMap.set(`${x.toFixed(1)},${z.toFixed(1)}`, { type: 'road', orientation: 0 });
+                }
+            });
+
+            // 增加北侧、中区与西区的蜿蜒/弯道交通环线
+            // 西侧 C-型路圈 (围绕 x = -10.5)
+            roadMap.set(`-10.5,-2.5`, { type: 'road_t', orientation: 1 }); // 纵向直道, 向左开口
+            roadMap.set(`-11.5,-2.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-12.5,-2.5`, { type: 'road_curve', orientation: 1 }); // 连接 Right (+X) & Bottom (+Z) -> orientation: 1
+            roadMap.set(`-12.5,-1.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`-12.5,-0.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`-12.5,0.5`, { type: 'road_curve', orientation: 2 }); // 连接 Top (-Z) & Right (+X)
+            roadMap.set(`-11.5,0.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-10.5,0.5`, { type: 'road_t', orientation: 1 }); // 纵向直道, 向左开口
+
+            // 中央双 S-弯路段 (连接 x = -10.5 和 x = 2.5)
+            roadMap.set(`-10.5,3.5`, { type: 'road_t', orientation: 3 }); // 纵向直道, 向右开口
+            roadMap.set(`-9.5,3.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-8.5,3.5`, { type: 'road_curve', orientation: 0 }); // 连接 Left (-X) & Bottom (+Z)
+            roadMap.set(`-8.5,4.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`-8.5,5.5`, { type: 'road_curve', orientation: 2 }); // 连接 Top (-Z) & Right (+X)
+            roadMap.set(`-7.5,5.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-6.5,5.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-5.5,5.5`, { type: 'road_curve', orientation: 3 }); // 连接 Left (-X) & Top (-Z) -> orientation: 3
+            roadMap.set(`-5.5,4.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`-5.5,3.5`, { type: 'road_curve', orientation: 1 }); // 连接 Bottom (+Z) & Right (+X) -> orientation: 1
+            roadMap.set(`-4.5,3.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-3.5,3.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-2.5,3.5`, { type: 'road_curve', orientation: 0 }); // 连接 Left (-X) & Bottom (+Z)
+            roadMap.set(`-2.5,4.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`-2.5,5.5`, { type: 'road_curve', orientation: 2 }); // 连接 Top (-Z) & Right (+X)
+            roadMap.set(`-1.5,5.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`-0.5,5.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`0.5,5.5`, { type: 'road_curve', orientation: 3 }); // 连接 Left (-X) & Top (-Z) -> orientation: 3
+            roadMap.set(`0.5,4.5`, { type: 'road', orientation: 0 });
+            roadMap.set(`0.5,3.5`, { type: 'road_curve', orientation: 1 }); // 连接 Bottom (+Z) & Right (+X) -> orientation: 1
+            roadMap.set(`1.5,3.5`, { type: 'road', orientation: 1 });
+            roadMap.set(`2.5,3.5`, { type: 'road_t', orientation: 1 }); // 纵向直道, 向左开口
+
+            // 横向连通干道 (z = -5.5, 2.5, 9.5)
+            const horizontalZs = [-5.5, 2.5, 9.5];
+            horizontalZs.forEach(z => {
+                for (let x = -14.5; x <= 14.5; x += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if (roadMap.has(key)) {
+                        // 交汇点处理
+                        if (verticalXs.includes(x)) {
+                            roadMap.set(key, { type: 'road_cross', orientation: 0 });
+                        }
+                    } else {
+                        roadMap.set(key, { type: 'road', orientation: 1 });
+                    }
+                }
+            });
+
+            // 放置所有道路与桥梁
+            roadMap.forEach((roadData, key) => {
+                const [x, z] = key.split(',').map(Number);
+                const formattedKey = `${x.toFixed(1)},${z.toFixed(1)}`;
+                if (riverCells.has(formattedKey)) {
+                    // 如果跨越河流，升格为 level 1 的跨河大桥，保留底层水面
+                    addB('bridge', x, z, 1, roadData.orientation);
+                } else {
+                    // 检测是否是紧邻桥梁的上下桥节点，如果是则生成坡道 (ramp)
+                    const keyNorth = `${x.toFixed(1)},${(z - 1).toFixed(1)}`;
+                    const keySouth = `${x.toFixed(1)},${(z + 1).toFixed(1)}`;
+                    const isNorthBridge = riverCells.has(keySouth); // 桥梁在南侧，当前格在北侧
+                    const isSouthBridge = riverCells.has(keyNorth); // 桥梁在北侧，当前格在南侧
+                    
+                    if (verticalXs.includes(x) && (isNorthBridge || isSouthBridge)) {
+                        const orientation = isNorthBridge ? 0 : 2;
+                        addB('ramp', x, z, 0, orientation, { levelStart: 0, levelEnd: 1 });
+                    } else {
+                        addB(roadData.type, x, z, 0, roadData.orientation);
+                    }
+                }
+                occupied.add(formattedKey);
+            });
+
+            // 3. 放置能效充足的市政电力/供水中心 (东北角集中，远离中心，需求占比 < 70%)
+            // 8个太阳能电站，8个市政水塔
+            for (let x = 11.5; x <= 14.5; x += 1.0) {
+                addB('solar_station', x, -14.5, 0);
+                addB('solar_station', x, -12.5, 0);
+                occupied.add(`${x.toFixed(1)},-14.5`);
+                occupied.add(`${x.toFixed(1)},-12.5`);
+                
+                addB('water_tower', x, -13.5, 0);
+                addB('water_tower', x, -11.5, 0);
+                occupied.add(`${x.toFixed(1)},-13.5`);
+                occupied.add(`${x.toFixed(1)},-11.5`);
+            }
+
+            // 4. 部署分散式市政公共服务设施 (2x2) - 30x30 满治安/消防/医疗/教育覆盖
+            placeService('police_station', -13.5, -5.5);  // NW
+            placeService('police_station', 11.5, 4.5);    // SE
+            placeService('fire_station', -13.5, 4.5);     // SW
+            placeService('fire_station', 11.5, -5.5);    // NE
+            placeService('hospital', -4.5, -1.5);         // Center-West
+            placeService('school', 4.5, -1.5);            // Center-East
+
+            // 5. 市中心自然风景区 (东方明珠 + 游乐园 + 密林公园)
+            placeService('oriental_pearl', 6.5, -1.5);    // 东方明珠地标 (2x2)
+            placeService('amusement_park', 6.5, 5.5);     // 游乐园 (2x2)
+
+            // 密林公园绿地 (放置树木和花田，增加绿化比率)
+            const parkCoords = [
+                {x: -1.5, z: 1.5}, {x: -0.5, z: 1.5}, {x: 0.5, z: 1.5},
+                {x: -1.5, z: 2.5}, {x: -0.5, z: 2.5}, {x: 0.5, z: 2.5},
+                {x: -3.5, z: -3.5}, {x: -3.5, z: -2.5}, {x: -2.5, z: -3.5}, {x: -2.5, z: -2.5},
+                {x: 1.5, z: -0.5}, {x: 2.5, z: -0.5}, {x: 1.5, z: -1.5}, {x: 2.5, z: -1.5}
+            ];
+            parkCoords.forEach((p, idx) => {
+                const key = `${p.x.toFixed(1)},${p.z.toFixed(1)}`;
+                if (!occupied.has(key)) {
+                    if (idx % 2 === 0) {
+                        addB('tree', p.x, p.z, 0, 0, { style: (idx % 3) + 1 });
+                    } else {
+                        addB('flower', p.x, p.z, 0);
+                    }
+                    occupied.add(key);
+                }
+            });
+
+            // 6. 随机化自然及社区生态规划 (增加建筑密度，消除非植物的纯绿地空地)
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            
+            for (let x = -14.5; x <= 14.5; x += 1.0) {
+                for (let z = -14.5; z <= 14.5; z += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if (occupied.has(key)) continue; // 避开道路及公用设施
+
+                    const rand = Math.random();
+
+                    // 西侧和中西侧 (x < 0) -> 住宅生活社区 (高密度，无非植物空地)
+                    if (x < 0) {
+                        if (rand < 0.18) {
+                            // 18% 概率放置住宅，极大提高密度
+                            addB('residential', x, z, 0, 0, { style: Math.floor(Math.random() * 3) + 1 });
+                        } else if (rand < 0.73) {
+                            // 55% 概率放置自然树木
+                            addB('tree', x, z, 0, 0, { style: Math.floor(Math.random() * 3) + 1 });
+                        } else {
+                            // 27% 概率放置彩虹花田，填满剩余所有空地
+                            addB('flower', x, z, 0);
+                        }
+                    }
+                    // 东侧和中东侧 (x > 0) -> CBD商业区与辅助商业配套 (高密度，无非植物空地)
+                    else {
+                        if (rand < 0.15) {
+                            // 15% 概率放置商务楼，极大提高密度
+                            addB('commercial', x, z, 0, 0, {
+                                style: Math.floor(Math.random() * 8),
+                                color: colors[Math.floor(Math.random() * colors.length)],
+                                height: 1.2 + Math.random() * 2.2
+                            });
+                        } else if (rand < 0.70) {
+                            // 55% 概率放置绿化树木
+                            addB('tree', x, z, 0, 0, { style: 2 });
+                        } else {
+                            // 30% 概率放置彩虹花田，填满剩余所有空地
+                            addB('flower', x, z, 0);
+                        }
+                    }
+                }
+            }
+
+            return {
+                gridSize: gridSize,
+                funds: 500000,
+                simulationMode: 'simulation',
+                taxRateResidential: 8,
+                taxRateCommercial: 9,
+                buildings: buildings
+            };
+        }
+
+        // 动态生成符合高标准规划的美观大气城市示例地图 (60x60)
+        function getExampleCityData60() {
+            const buildings = [];
+            const gridSize = 60;
+            const occupied = new Set();
+            
+            function addB(type, x, z, level = 0, orientation = 0, extra = {}) {
+                const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                buildings.push({
+                    key: key,
+                    level: level,
+                    type: type,
+                    x: x,
+                    z: z,
+                    orientation: orientation,
+                    ...extra
+                });
+            }
+
+            function placeService(type, x, z) {
+                addB(type, x, z);
+                occupied.add(`${x.toFixed(1)},${z.toFixed(1)}`);
+                occupied.add(`${(x + 1).toFixed(1)},${z.toFixed(1)}`);
+                occupied.add(`${x.toFixed(1)},${(z + 1).toFixed(1)}`);
+                occupied.add(`${(x + 1).toFixed(1)},${(z + 1).toFixed(1)}`);
+            }
+
+            // 1. 生成河流 (北部 z = -18.5 左右正弦波)
+            const riverCells = new Set();
+            for (let x = -29.5; x <= 29.5; x += 1.0) {
+                const z = -18.5 + Math.round(Math.sin(x / 4) * 2);
+                const key1 = `${x.toFixed(1)},${z.toFixed(1)}`;
+                const key2 = `${x.toFixed(1)},${(z + 1).toFixed(1)}`;
+                riverCells.add(key1);
+                riverCells.add(key2);
+                addB('water', x, z, 0);
+                addB('water', x, z + 1, 0);
+                occupied.add(key1);
+                occupied.add(key2);
+            }
+
+            // 2. 规划主干道与分支路网
+            const roadMap = new Map();
+
+            // 纵向直道
+            const verticalXs = [-20.5, -7.5, 7.5, 20.5];
+            verticalXs.forEach(x => {
+                for (let z = -29.5; z <= 29.5; z += 1.0) {
+                    roadMap.set(`${x.toFixed(1)},${z.toFixed(1)}`, { type: 'road', orientation: 0 });
+                }
+            });
+
+            // 横向连通干道 (z = -11.5, 2.5, 16.5)
+            const horizontalZs = [-11.5, 2.5, 16.5];
+            horizontalZs.forEach(z => {
+                for (let x = -29.5; x <= 29.5; x += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if (roadMap.has(key)) {
+                        // 交汇点处理
+                        if (verticalXs.includes(x)) {
+                            roadMap.set(key, { type: 'road_cross', orientation: 0 });
+                        }
+                    } else {
+                        roadMap.set(key, { type: 'road', orientation: 1 });
+                    }
+                }
+            });
+
+            // S-shaped central road
+            const sRoads = [
+                {x: -7.5, z: 9.5, type: 'road_t', orientation: 3},
+                {x: -6.5, z: 9.5, type: 'road', orientation: 1},
+                {x: -5.5, z: 9.5, type: 'road', orientation: 1},
+                {x: -4.5, z: 9.5, type: 'road_curve', orientation: 0},
+                {x: -4.5, z: 10.5, type: 'road', orientation: 0},
+                {x: -4.5, z: 11.5, type: 'road', orientation: 0},
+                {x: -4.5, z: 12.5, type: 'road_curve', orientation: 2},
+                {x: -3.5, z: 12.5, type: 'road', orientation: 1},
+                {x: -2.5, z: 12.5, type: 'road', orientation: 1},
+                {x: -1.5, z: 12.5, type: 'road', orientation: 1},
+                {x: -0.5, z: 12.5, type: 'road', orientation: 1},
+                {x: 0.5, z: 12.5, type: 'road', orientation: 1},
+                {x: 1.5, z: 12.5, type: 'road', orientation: 1},
+                {x: 2.5, z: 12.5, type: 'road', orientation: 1},
+                {x: 3.5, z: 12.5, type: 'road', orientation: 1},
+                {x: 4.5, z: 12.5, type: 'road_curve', orientation: 3},
+                {x: 4.5, z: 11.5, type: 'road', orientation: 0},
+                {x: 4.5, z: 10.5, type: 'road', orientation: 0},
+                {x: 4.5, z: 9.5, type: 'road_curve', orientation: 1},
+                {x: 5.5, z: 9.5, type: 'road', orientation: 1},
+                {x: 6.5, z: 9.5, type: 'road', orientation: 1},
+                {x: 7.5, z: 9.5, type: 'road_t', orientation: 1}
+            ];
+
+            sRoads.forEach(r => {
+                roadMap.set(`${r.x.toFixed(1)},${r.z.toFixed(1)}`, { type: r.type, orientation: r.orientation });
+            });
+
+            // 放置所有道路与桥梁
+            roadMap.forEach((roadData, key) => {
+                const [x, z] = key.split(',').map(Number);
+                const formattedKey = `${x.toFixed(1)},${z.toFixed(1)}`;
+                if (riverCells.has(formattedKey)) {
+                    // 如果跨越河流，升格为 level 1 的跨河大桥，保留底层水面
+                    addB('bridge', x, z, 1, roadData.orientation);
+                } else {
+                    // 检测是否是紧邻桥梁的上下桥节点，如果是则生成坡道 (ramp)
+                    const keyNorth = `${x.toFixed(1)},${(z - 1).toFixed(1)}`;
+                    const keySouth = `${x.toFixed(1)},${(z + 1).toFixed(1)}`;
+                    const isNorthBridge = riverCells.has(keySouth);
+                    const isSouthBridge = riverCells.has(keyNorth);
+                    
+                    if (verticalXs.includes(x) && (isNorthBridge || isSouthBridge)) {
+                        const orientation = isNorthBridge ? 0 : 2;
+                        addB('ramp', x, z, 0, orientation, { levelStart: 0, levelEnd: 1 });
+                    } else {
+                        addB(roadData.type, x, z, 0, roadData.orientation);
+                    }
+                }
+                occupied.add(formattedKey);
+            });
+
+            // 3. 放置集中市政公用能源中心 (东北角 9x9 区域，共40+个太阳能和40+个水塔，提供极充沛电水供给)
+            for (let x = 21.5; x <= 29.5; x += 1.0) {
+                for (let z = -29.5; z <= -21.5; z += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if ((Math.round(x + z) % 2) === 0) {
+                        addB('solar_station', x, z, 0);
+                    } else {
+                        addB('water_tower', x, z, 0);
+                    }
+                    occupied.add(key);
+                }
+            }
+
+            // 4. 部署分散式市政公共服务设施 (2x2) - 100% 空间治安/消防/医疗/教育覆盖
+            function addServiceSet(colXStart, zValue) {
+                placeService('police_station', colXStart, zValue);
+                placeService('fire_station', colXStart + 2, zValue);
+                placeService('hospital', colXStart + 4, zValue);
+                placeService('school', colXStart + 6, zValue);
+            }
+
+            // Column 1 (West)
+            addServiceSet(-29.5, -24.5);
+            addServiceSet(-29.5, -4.5);
+            addServiceSet(-29.5, 9.5);
+            addServiceSet(-29.5, 21.5);
+
+            // Column 2 (Center-West)
+            addServiceSet(-15.5, -24.5);
+            addServiceSet(-15.5, -4.5);
+            addServiceSet(-15.5, 4.5);
+            addServiceSet(-15.5, 21.5);
+
+            // Column 3 (Center-East)
+            addServiceSet(8.5, -24.5);
+            addServiceSet(8.5, -4.5);
+            addServiceSet(8.5, 4.5);
+            addServiceSet(8.5, 21.5);
+
+            // Column 4 (East)
+            addServiceSet(21.5, -14.5);
+            addServiceSet(21.5, -4.5);
+            addServiceSet(21.5, 9.5);
+            addServiceSet(21.5, 21.5);
+
+            // 5. 市中心自然风景区 (东方明珠 + 游乐园)
+            placeService('oriental_pearl', -2.5, -4.5);
+            placeService('amusement_park', 0.5, -4.5);
+            placeService('oriental_pearl', -2.5, 4.5);
+            placeService('amusement_park', 0.5, 4.5);
+
+            // 中央绿轴公园 (密林与花海交错)
+            for (let x = -6.5; x <= 6.5; x += 1.0) {
+                for (let z = -29.5; z <= 29.5; z += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if (!occupied.has(key)) {
+                        if (Math.random() < 0.5) {
+                            addB('tree', x, z, 0, 0, { style: Math.floor(Math.random() * 3) + 1 });
+                        } else {
+                            addB('flower', x, z, 0);
+                        }
+                        occupied.add(key);
+                    }
+                }
+            }
+
+            // 6. 随机化自然及社区生态规划 (增加建筑密度，消除非植物的纯绿地空地)
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            
+            for (let x = -29.5; x <= 29.5; x += 1.0) {
+                for (let z = -29.5; z <= 29.5; z += 1.0) {
+                    const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+                    if (occupied.has(key)) continue;
+
+                    const rand = Math.random();
+
+                    if (x < -6.5) {
+                        if (rand < 0.25) {
+                            addB('residential', x, z, 0, 0, { style: Math.floor(Math.random() * 3) + 1 });
+                        } else if (rand < 0.80) {
+                            addB('tree', x, z, 0, 0, { style: Math.floor(Math.random() * 3) + 1 });
+                        } else {
+                            addB('flower', x, z, 0);
+                        }
+                    } else if (x > 6.5) {
+                        if (rand < 0.20) {
+                            addB('commercial', x, z, 0, 0, {
+                                style: Math.floor(Math.random() * 8),
+                                color: colors[Math.floor(Math.random() * colors.length)],
+                                height: 1.2 + Math.random() * 2.2
+                            });
+                        } else if (rand < 0.75) {
+                            addB('tree', x, z, 0, 0, { style: 2 });
+                        } else {
+                            addB('flower', x, z, 0);
+                        }
+                    }
+                }
+            }
+
+            return {
+                gridSize: gridSize,
+                funds: 500000,
+                simulationMode: 'simulation',
+                taxRateResidential: 8,
+                taxRateCommercial: 9,
+                buildings: buildings
+            };
         }
 
         // 获取当前城市的序列化数据
@@ -3242,10 +5083,8 @@
             let savedGridSize = Array.isArray(data) ? 30 : (data.gridSize || 30);
 
             // 1. 恢复网格大小
-            if (savedGridSize > gridSize) {
-                while (gridSize < savedGridSize) {
-                    expandGrid();
-                }
+            if (savedGridSize !== gridSize) {
+                resetGridSize(savedGridSize);
             }
 
             // 2. 清空当前城市
@@ -3368,6 +5207,20 @@
                             newMesh.userData.orientation = item.orientation;
                         }
                         break;
+                    case 'solar_station':
+                        newMesh = createSolarStation(item.x, item.z);
+                        if (item.orientation) {
+                            newMesh.rotation.y = item.orientation * (Math.PI / 2);
+                            newMesh.userData.orientation = item.orientation;
+                        }
+                        break;
+                    case 'water_tower':
+                        newMesh = createWaterTower(item.x, item.z);
+                        if (item.orientation) {
+                            newMesh.rotation.y = item.orientation * (Math.PI / 2);
+                            newMesh.userData.orientation = item.orientation;
+                        }
+                        break;
                 }
                 
                 if (newMesh) {
@@ -3400,6 +5253,8 @@
                     }
                 });
             }
+            // 重新计算并更新仿真数据与面板
+            updateSimulationStep();
         }
 
         // --- 本地 LocalStorage 保存/读取 ---
@@ -3429,6 +5284,137 @@
                 console.error(e);
             }
         });
+
+        demo30Btn.addEventListener('click', () => {
+            try {
+                const data = getExampleCityData30();
+                loadCityData(data);
+                showStatus('✅ 30x30示例加载成功', '#4f46e5');
+                showToast('30x30规划示例地图已成功加载！', 'success');
+            } catch (e) {
+                showStatus('❌ 示例加载失败', '#dc2626');
+                console.error(e);
+            }
+        });
+
+        demo60Btn.addEventListener('click', () => {
+            try {
+                const data = getExampleCityData60();
+                loadCityData(data);
+                showStatus('✅ 60x60示例加载成功', '#4f46e5');
+                showToast('60x60规划示例地图已成功加载！', 'success');
+            } catch (e) {
+                showStatus('❌ 示例加载失败', '#dc2626');
+                console.error(e);
+            }
+        });
+
+        screenshotBtn.addEventListener('click', () => {
+            showStatus('📸 正在生成超清 300 DPI 风景照...', '#db2777');
+            setTimeout(() => {
+                try {
+                    // 1. 保存当前渲染器大小、比率和相机纵横比
+                    const originalWidth = window.innerWidth;
+                    const originalHeight = window.innerHeight;
+                    const originalPixelRatio = renderer.getPixelRatio();
+                    const originalAspect = camera.aspect;
+                    
+                    // 2. 设定超清印刷级高分辨率 (固定宽度 3840px, 4K超清，确保打印时达到真 300 DPI)
+                    const printWidth = 3840;
+                    const printHeight = Math.round(printWidth / originalAspect);
+                    
+                    // 3. 临时调整渲染器尺寸和相机投影矩阵
+                    renderer.setPixelRatio(1);
+                    renderer.setSize(printWidth, printHeight);
+                    camera.aspect = printWidth / printHeight;
+                    camera.updateProjectionMatrix();
+                    
+                    // 4. 隐藏规划光标，避免被截取到画面中
+                    const cursorVisibleState = cursor.visible;
+                    cursor.visible = false;
+                    
+                    // 5. 强制用超清分辨率进行渲染
+                    renderer.render(scene, camera);
+                    
+                    // 6. 获取 canvas 的 jpeg DataURL (质量为 0.95)
+                    let dataURL = renderer.domElement.toDataURL('image/jpeg', 0.95);
+                    
+                    // 7. 恢复规划光标、渲染器大小和相机投影
+                    cursor.visible = cursorVisibleState;
+                    renderer.setPixelRatio(originalPixelRatio);
+                    renderer.setSize(originalWidth, originalHeight);
+                    camera.aspect = originalAspect;
+                    camera.updateProjectionMatrix();
+                    
+                    // 重新渲染当前屏幕视口以还原显示
+                    renderer.render(scene, camera);
+                    
+                    // 8. 修改 JPEG 元数据，写入 300 DPI 属性 (JFIF APP0)
+                    try {
+                        dataURL = setJpegDpi(dataURL, 300);
+                    } catch (dpiErr) {
+                        console.warn('写入 DPI 元数据失败，使用原始超清图片下载:', dpiErr);
+                    }
+                    
+                    // 9. 触发浏览器下载
+                    const link = document.createElement('a');
+                    const date = new Date();
+                    const timestamp = `${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2,'0')}${date.getDate().toString().padStart(2,'0')}_${date.getHours().toString().padStart(2,'0')}${date.getMinutes().toString().padStart(2,'0')}${date.getSeconds().toString().padStart(2,'0')}`;
+                    link.download = `city_300dpi_${timestamp}.jpg`;
+                    link.href = dataURL;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    showStatus('✅ 照片已成功保存 (300 DPI)', '#db2777');
+                } catch (err) {
+                    showStatus('❌ 拍照失败', '#dc2626');
+                    console.error('Screenshot error:', err);
+                }
+            }, 100);
+        });
+
+        // 辅助函数：修改 JPEG Base64 中的 JFIF DPI 元数据为 300 DPI
+        function setJpegDpi(base64Str, dpiValue = 300) {
+            const parts = base64Str.split(',');
+            const contentType = parts[0];
+            const byteCharacters = atob(parts[1]);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            
+            // 寻找 JFIF APP0 标记 (0xFF 0xE0)
+            let jfifOffset = -1;
+            for (let i = 0; i < byteArray.length - 15; i++) {
+                if (byteArray[i] === 0xFF && byteArray[i+1] === 0xE0 && 
+                    byteArray[i+4] === 0x4A && byteArray[i+5] === 0x46 && 
+                    byteArray[i+6] === 0x49 && byteArray[i+7] === 0x46) { // "JFIF"
+                    jfifOffset = i;
+                    break;
+                }
+            }
+            
+            if (jfifOffset !== -1) {
+                // 修改密度单位为 1 (dots per inch)
+                byteArray[jfifOffset + 11] = 1;
+                // 修改 X 方向 DPI (2 字节)
+                byteArray[jfifOffset + 12] = (dpiValue >> 8) & 0xFF;
+                byteArray[jfifOffset + 13] = dpiValue & 0xFF;
+                // 修改 Y 方向 DPI (2 字节)
+                byteArray[jfifOffset + 14] = (dpiValue >> 8) & 0xFF;
+                byteArray[jfifOffset + 15] = dpiValue & 0xFF;
+            }
+            
+            // 转回 base64
+            let binary = '';
+            const len = byteArray.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(byteArray[i]);
+            }
+            return contentType + ',' + btoa(binary);
+        }
 
         // 添加提升/降低高度的 UI 事件
         let elevationMode = null; // 'up', 'down', 'ramp' 或 null
@@ -3837,6 +5823,7 @@
         }
         
         // 确保资源加载完毕后开始渲染
+        // 确保资源加载完毕后开始渲染
         window.onload = function() {
             animate();
             
@@ -3850,6 +5837,11 @@
                 objectsGroup.add(mesh);
                 setObjAtLevel(`${pos.x},${pos.z}`, 0, { type: 'road', mesh: mesh });
             });
+
+            // 初始化大盘监听器与启动仿真步进
+            setupDashboardListeners();
+            updateSimulationStep();
+            setInterval(updateSimulationStep, 5000);
         };
 
         window.addEventListener('resize', () => {
